@@ -36,23 +36,32 @@ except ImportError as e:
 
 try:
     import psycopg2
-    from psycopg2 import sql
     print("✅ psycopg2 importado")
 except ImportError as e:
     print(f"❌ psycopg2 não disponível: {e}")
     sys.exit(1)
 
-# Tenta importar DeepFace apenas se OpenCV estiver disponível
+# DeepFace - carregamento condicional e otimizado
+DEEPFACE_AVAILABLE = False
+DeepFace = None
+
 if CV2_AVAILABLE:
     try:
+        # Configurações para reduzir uso de memória
+        os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+        os.environ['TF_GPU_THREAD_MODE'] = 'gpu_private'
+        
         from deepface import DeepFace
         DEEPFACE_AVAILABLE = True
         print("✅ DeepFace importado")
+        
+        # Pré-configurar para usar backend mais leve
+        os.environ['DEEPFACE_BACKEND'] = 'opencv'
+        
     except ImportError as e:
         print(f"❌ DeepFace não disponível: {e}")
-        DEEPFACE_AVAILABLE = False
-else:
-    DEEPFACE_AVAILABLE = False
+    except Exception as e:
+        print(f"⚠️ DeepFace disponível mas com problemas: {e}")
 
 import base64
 import io
@@ -74,15 +83,12 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-key-123')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
 
 def clean_database_url(url):
-    """Limpa a URL do banco de dados removendo 'psql' e aspas"""
+    """Limpa a URL do banco de dados"""
     if not url:
         return url
     
-    # Remove o comando psql e aspas se presentes
     url = re.sub(r'^psql\s*[\'"]?', '', url)
     url = re.sub(r'[\'"]\s*$', '', url)
-    
-    # Remove channel_binding parameter se existir
     url = re.sub(r'[&?]channel_binding=require', '', url)
     
     return url.strip()
@@ -91,17 +97,12 @@ def clean_database_url(url):
 def get_db_connection():
     try:
         DATABASE_URL = os.getenv('DATABASE_URL')
-        print(f"🔗 DATABASE_URL: {DATABASE_URL[:50]}...")  # Log parcial para segurança
         
         if not DATABASE_URL:
             raise ValueError("DATABASE_URL não encontrada")
         
-        # Limpa a URL se necessário
         DATABASE_URL = clean_database_url(DATABASE_URL)
-        print(f"🔗 DATABASE_URL limpa: {DATABASE_URL[:50]}...")
-        
         conn = psycopg2.connect(DATABASE_URL)
-        print("✅ Conexão com o banco estabelecida!")
         return conn
     except Exception as e:
         print(f"❌ Erro na conexão com o banco: {e}")
@@ -113,8 +114,6 @@ def init_database():
         conn = get_db_connection()
         if conn:
             cursor = conn.cursor()
-            
-            # Verifica se a tabela pessoas existe
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS pessoas (
                     id SERIAL PRIMARY KEY,
@@ -126,8 +125,6 @@ def init_database():
                     ativo BOOLEAN DEFAULT true
                 )
             """)
-            
-            # Verifica se a tabela registros_reconhecimento existe
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS registros_reconhecimento (
                     id SERIAL PRIMARY KEY,
@@ -137,53 +134,14 @@ def init_database():
                     data_reconhecimento TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            
             conn.commit()
             cursor.close()
             conn.close()
             print("✅ Banco de dados inicializado com sucesso!")
-            
-            # Insere dados de exemplo se estiver vazio
-            insert_sample_data()
         else:
             print("❌ Não foi possível conectar ao banco")
     except Exception as e:
-        print(f"⚠️ Aviso na inicialização do banco: {e}")
-
-def insert_sample_data():
-    """Insere dados de exemplo para teste"""
-    try:
-        conn = get_db_connection()
-        if not conn:
-            return
-            
-        cursor = conn.cursor()
-        
-        # Verifica se já existem pessoas
-        cursor.execute("SELECT COUNT(*) FROM pessoas")
-        count = cursor.fetchone()[0]
-        
-        if count == 0:
-            print("📝 Inserindo dados de exemplo...")
-            cursor.execute("""
-                INSERT INTO pessoas (nome, email, telefone) VALUES 
-                ('João Silva', 'joao.silva@email.com', '(11) 99999-9999'),
-                ('Maria Santos', 'maria.santos@email.com', '(11) 88888-8888')
-            """)
-            
-            cursor.execute("""
-                INSERT INTO registros_reconhecimento (pessoa_id, metodo, confianca) VALUES 
-                (1, 'upload', 95.50),
-                (2, 'camera', 88.75)
-            """)
-            
-            conn.commit()
-            print("✅ Dados de exemplo inseridos!")
-        
-        cursor.close()
-        conn.close()
-    except Exception as e:
-        print(f"⚠️ Erro ao inserir dados de exemplo: {e}")
+        print(f"⚠️ Aviso: {e}")
 
 def allowed_file(filename):
     return '.' in filename and \
@@ -200,21 +158,25 @@ def base64_to_image(base64_string):
     except Exception as e:
         raise ValueError(f"Erro ao converter imagem: {str(e)}")
 
+# Função otimizada para extrair embedding
 def extract_embedding(image_path):
-    """Extrai embedding facial usando DeepFace"""
+    """Extrai embedding facial usando DeepFace de forma otimizada"""
     if not DEEPFACE_AVAILABLE:
         return None
     
     try:
+        # Configurações otimizadas para Render free
         embedding_objs = DeepFace.represent(
             img_path=image_path,
-            model_name="Facenet",
+            model_name="Facenet",  # Mais leve que VGG-Face
             detector_backend="opencv",
-            enforce_detection=False
+            enforce_detection=False,
+            align=False,  # Desativa alinhamento para economizar processamento
+            normalization="base"  # Normalização mais simples
         )
         
         if embedding_objs:
-            embedding_array = np.array(embedding_objs[0]['embedding'])
+            embedding_array = np.array(embedding_objs[0]['embedding'], dtype=np.float32)
             return pickle.dumps(embedding_array)
         return None
         
@@ -222,12 +184,14 @@ def extract_embedding(image_path):
         print(f"Erro ao extrair embedding: {e}")
         return None
 
+# Função otimizada para reconhecimento facial
 def facial_recognition_from_embedding(image_path):
-    """Realiza reconhecimento facial comparando embeddings"""
+    """Realiza reconhecimento facial comparando embeddings de forma otimizada"""
     if not DEEPFACE_AVAILABLE:
         return {"error": "Sistema de reconhecimento não disponível"}
     
     try:
+        # Extrai embedding da imagem de entrada
         input_embedding = extract_embedding(image_path)
         if input_embedding is None:
             return {"error": "Não foi possível extrair embedding da imagem"}
@@ -259,10 +223,12 @@ def facial_recognition_from_embedding(image_path):
             
             if db_embedding:
                 db_array = pickle.loads(db_embedding)
+                
+                # Calcula similaridade cosseno otimizada
                 similarity = cosine_similarity(input_array, db_array)
                 confidence = similarity * 100
                 
-                if confidence > best_confidence and confidence > 70:
+                if confidence > best_confidence and confidence > 65:  # Threshold reduzido
                     best_confidence = confidence
                     best_match = {
                         'id': pessoa_id,
@@ -351,7 +317,7 @@ def estatisticas():
     """Página de estatísticas"""
     return render_template('estatisticas.html')
 
-# APIs
+# APIs básicas
 @app.route('/api/estatisticas', methods=['GET'])
 def api_estatisticas():
     """API para estatísticas"""
@@ -372,23 +338,13 @@ def api_estatisticas():
         metodo_data = cursor.fetchall()
         reconhecimentos_metodo = {metodo: count for metodo, count in metodo_data}
         
-        cursor.execute('''
-            SELECT DATE(data_reconhecimento) as data, COUNT(*) 
-            FROM registros_reconhecimento 
-            WHERE data_reconhecimento >= CURRENT_DATE - INTERVAL '7 days'
-            GROUP BY DATE(data_reconhecimento)
-            ORDER BY data
-        ''')
-        timeline_data = cursor.fetchall()
-        reconhecimentos_7_dias = {str(data): count for data, count in timeline_data}
-        
         conn.close()
         
         return jsonify({
             "total_pessoas": total_pessoas,
             "total_reconhecimentos": total_reconhecimentos,
             "reconhecimentos_metodo": reconhecimentos_metodo,
-            "reconhecimentos_7_dias": reconhecimentos_7_dias
+            "reconhecimentos_7_dias": {}
         })
         
     except Exception as e:
@@ -397,6 +353,9 @@ def api_estatisticas():
 @app.route('/api/cadastrar_pessoa', methods=['POST'])
 def cadastrar_pessoa():
     """API para cadastrar nova pessoa com embedding"""
+    if not DEEPFACE_AVAILABLE:
+        return jsonify({"error": "Sistema de reconhecimento facial não disponível"})
+    
     try:
         nome = request.form.get('nome', '').strip()
         email = request.form.get('email', '').strip()
@@ -413,11 +372,16 @@ def cadastrar_pessoa():
             return jsonify({"error": "Nenhuma foto selecionada"})
         
         if file and allowed_file(file.filename):
+            # Processamento otimizado - redimensiona imagem primeiro
+            image = Image.open(file.stream)
+            
+            # Redimensiona para reduzir processamento (máx 500px)
+            max_size = (500, 500)
+            image.thumbnail(max_size, Image.Resampling.LANCZOS)
+            
             temp_filename = f"temp_{uuid.uuid4().hex}.jpg"
             temp_path = os.path.join(app.config['UPLOAD_FOLDER'], temp_filename)
-            
-            image = Image.open(file.stream)
-            image.save(temp_path, 'JPEG')
+            image.save(temp_path, 'JPEG', quality=85)  # Qualidade reduzida
             
             embedding = extract_embedding(temp_path)
             
@@ -456,7 +420,7 @@ def cadastrar_pessoa():
 def recognize_upload():
     """Reconhecimento por upload de arquivo"""
     if not DEEPFACE_AVAILABLE:
-        return jsonify({"error": "Sistema de reconhecimento facial não disponível no momento"})
+        return jsonify({"error": "Sistema de reconhecimento facial não disponível"})
     
     try:
         if 'file' not in request.files:
@@ -467,11 +431,16 @@ def recognize_upload():
             return jsonify({"error": "Nenhum arquivo selecionado"})
         
         if file and allowed_file(file.filename):
+            # Processamento otimizado - redimensiona imagem
+            image = Image.open(file.stream)
+            
+            # Redimensiona para reduzir processamento
+            max_size = (500, 500)
+            image.thumbnail(max_size, Image.Resampling.LANCZOS)
+            
             filename = f"{uuid.uuid4().hex}.jpg"
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            
-            image = Image.open(file.stream)
-            image.save(filepath, 'JPEG')
+            image.save(filepath, 'JPEG', quality=85)
             
             result = facial_recognition_from_embedding(filepath)
             
@@ -492,7 +461,7 @@ def recognize_upload():
 def recognize_camera():
     """Reconhecimento por câmera"""
     if not DEEPFACE_AVAILABLE:
-        return jsonify({"error": "Sistema de reconhecimento facial não disponível no momento"})
+        return jsonify({"error": "Sistema de reconhecimento facial não disponível"})
     
     try:
         data = request.get_json()
@@ -500,9 +469,14 @@ def recognize_camera():
             return jsonify({"error": "Nenhuma imagem recebida"})
         
         image = base64_to_image(data['image'])
+        
+        # Redimensiona para reduzir processamento
+        max_size = (500, 500)
+        image.thumbnail(max_size, Image.Resampling.LANCZOS)
+        
         filename = f"{uuid.uuid4().hex}.jpg"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        image.save(filepath, 'JPEG')
+        image.save(filepath, 'JPEG', quality=85)
         
         result = facial_recognition_from_embedding(filepath)
         
