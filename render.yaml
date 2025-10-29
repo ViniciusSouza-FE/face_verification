@@ -9,7 +9,7 @@ services:
     startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120 app:app
     envVars:
       - key: DATABASE_URL
-        value: sua_string_de_conexao_aqui
+        value: postgresql://neondb_owner:npg_6mDK2ZfuOEXU@ep-purple-bonus-ac0zdopi-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require
       - key: SECRET_KEY
         generateValue: true
       - key: FLASK_DEBUG
