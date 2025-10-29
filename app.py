@@ -9,11 +9,20 @@ os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '1'
 os.environ['OPENCV_LOG_LEVEL'] = 'ERROR'
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
+print(f"🚀 Iniciando Face Confirmation System...")
+print(f"📋 Python version: {sys.version}")
+
+# Verificar se estamos no Render
+if 'RENDER' in os.environ:
+    print("🌐 Ambiente: Render")
+else:
+    print("💻 Ambiente: Local")
+
 # Tenta importar OpenCV de forma segura
 try:
     import cv2
     CV2_AVAILABLE = True
-    print("✅ OpenCV carregado")
+    print(f"✅ OpenCV carregado - versão: {cv2.__version__}")
 except ImportError as e:
     print(f"❌ OpenCV não disponível: {e}")
     CV2_AVAILABLE = False
@@ -61,11 +70,15 @@ def get_db_connection():
     try:
         DATABASE_URL = os.getenv('DATABASE_URL')
         if not DATABASE_URL:
-            raise ValueError("DATABASE_URL não encontrada")
+            print("❌ DATABASE_URL não encontrada")
+            return None
+            
+        print(f"🔗 Conectando ao banco...")
         conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+        print("✅ Conexão com banco estabelecida")
         return conn
     except Exception as e:
-        print(f"Erro na conexão com o banco: {e}")
+        print(f"❌ Erro na conexão com o banco: {e}")
         return None
 
 def init_database():
@@ -74,34 +87,50 @@ def init_database():
         conn = get_db_connection()
         if conn:
             cursor = conn.cursor()
+            
+            # Verifica se as tabelas já existem
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS pessoas (
-                    id SERIAL PRIMARY KEY,
-                    nome VARCHAR(255) NOT NULL,
-                    email VARCHAR(255),
-                    telefone VARCHAR(50),
-                    embedding BYTEA,
-                    data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    ativo BOOLEAN DEFAULT true
-                )
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public'
             """)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS registros_reconhecimento (
-                    id SERIAL PRIMARY KEY,
-                    pessoa_id INTEGER REFERENCES pessoas(id),
-                    metodo VARCHAR(50),
-                    confianca DECIMAL(5,2),
-                    data_reconhecimento TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+            existing_tables = [table[0] for table in cursor.fetchall()]
+            print(f"📊 Tabelas existentes: {existing_tables}")
+            
+            if 'pessoas' not in existing_tables:
+                cursor.execute("""
+                    CREATE TABLE pessoas (
+                        id SERIAL PRIMARY KEY,
+                        nome VARCHAR(255) NOT NULL,
+                        email VARCHAR(255),
+                        telefone VARCHAR(50),
+                        embedding BYTEA,
+                        data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        ativo BOOLEAN DEFAULT true
+                    )
+                """)
+                print("✅ Tabela 'pessoas' criada")
+            
+            if 'registros_reconhecimento' not in existing_tables:
+                cursor.execute("""
+                    CREATE TABLE registros_reconhecimento (
+                        id SERIAL PRIMARY KEY,
+                        pessoa_id INTEGER REFERENCES pessoas(id),
+                        metodo VARCHAR(50),
+                        confianca DECIMAL(5,2),
+                        data_reconhecimento TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                print("✅ Tabela 'registros_reconhecimento' criada")
+            
             conn.commit()
             cursor.close()
             conn.close()
-            print("✅ Banco de dados inicializado com sucesso!")
+            print("🎉 Banco de dados inicializado com sucesso!")
         else:
             print("❌ Não foi possível conectar ao banco")
     except Exception as e:
-        print(f"⚠️ Aviso: {e}")
+        print(f"⚠️ Erro na inicialização do banco: {e}")
 
 def allowed_file(filename):
     return '.' in filename and \
@@ -124,6 +153,7 @@ def extract_embedding(image_path):
         return None
     
     try:
+        print(f"🔍 Extraindo embedding de: {image_path}")
         embedding_objs = DeepFace.represent(
             img_path=image_path,
             model_name="Facenet",
@@ -134,11 +164,12 @@ def extract_embedding(image_path):
         if embedding_objs:
             # Converte o embedding para bytes para armazenamento
             embedding_array = np.array(embedding_objs[0]['embedding'])
+            print(f"✅ Embedding extraído - dimensões: {embedding_array.shape}")
             return pickle.dumps(embedding_array)
         return None
         
     except Exception as e:
-        print(f"Erro ao extrair embedding: {e}")
+        print(f"❌ Erro ao extrair embedding: {e}")
         return None
 
 def facial_recognition_from_embedding(image_path):
@@ -169,6 +200,8 @@ def facial_recognition_from_embedding(image_path):
         pessoas = cursor.fetchall()
         conn.close()
         
+        print(f"🔎 Comparando com {len(pessoas)} pessoas no banco")
+        
         if not pessoas:
             return {"error": "Nenhuma pessoa cadastrada no sistema"}
         
@@ -196,15 +229,18 @@ def facial_recognition_from_embedding(image_path):
                     }
         
         if best_match:
+            print(f"✅ Pessoa identificada: {best_match['nome']} ({best_confidence:.2f}%)")
             return {
                 "success": True,
                 "person": best_match,
                 "confidence": round(best_confidence, 2)
             }
         else:
+            print("❌ Nenhuma correspondência encontrada")
             return {"success": False, "message": "Pessoa não identificada"}
             
     except Exception as e:
+        print(f"❌ Erro no reconhecimento: {str(e)}")
         return {"error": f"Erro no reconhecimento: {str(e)}"}
 
 def cosine_similarity(a, b):
@@ -226,8 +262,9 @@ def save_recognition_log(person_id, metodo, confianca):
         
         conn.commit()
         conn.close()
+        print(f"📝 Log salvo: pessoa_id={person_id}, método={metodo}, confiança={confianca}")
     except Exception as e:
-        print(f"Erro ao salvar log: {e}")
+        print(f"❌ Erro ao salvar log: {e}")
 
 # Rotas principais
 @app.route('/')
@@ -268,6 +305,7 @@ def pessoas():
         
         return render_template('pessoas.html', pessoas=pessoas_data)
     except Exception as e:
+        print(f"❌ Erro na rota /pessoas: {e}")
         return render_template('pessoas.html', pessoas=[], error=str(e))
 
 @app.route('/estatisticas')
@@ -318,6 +356,7 @@ def api_estatisticas():
         })
         
     except Exception as e:
+        print(f"❌ Erro em /api/estatisticas: {e}")
         return jsonify({"error": str(e)})
 
 @app.route('/api/cadastrar_pessoa', methods=['POST'])
@@ -371,6 +410,7 @@ def cadastrar_pessoa():
             conn.commit()
             conn.close()
             
+            print(f"✅ Pessoa cadastrada: {nome} (ID: {pessoa_id})")
             return jsonify({
                 "success": True,
                 "message": f"Pessoa {nome} cadastrada com sucesso!",
@@ -380,6 +420,7 @@ def cadastrar_pessoa():
             return jsonify({"error": "Tipo de arquivo não permitido. Use JPG, PNG ou JPEG"})
             
     except Exception as e:
+        print(f"❌ Erro em /api/cadastrar_pessoa: {e}")
         return jsonify({"error": f"Erro no cadastro: {str(e)}"})
 
 @app.route('/api/recognize_upload', methods=['POST'])
@@ -418,6 +459,7 @@ def recognize_upload():
             return jsonify({"error": "Tipo de arquivo não permitido"})
             
     except Exception as e:
+        print(f"❌ Erro em /api/recognize_upload: {e}")
         return jsonify({"error": f"Erro no processamento: {str(e)}"})
 
 @app.route('/api/recognize_camera', methods=['POST'])
@@ -447,6 +489,7 @@ def recognize_camera():
         return jsonify(result)
         
     except Exception as e:
+        print(f"❌ Erro em /api/recognize_camera: {e}")
         return jsonify({"error": f"Erro no processamento: {str(e)}"})
 
 @app.route('/api/pessoas', methods=['GET'])
@@ -479,6 +522,7 @@ def api_pessoas():
         return jsonify(pessoas)
         
     except Exception as e:
+        print(f"❌ Erro em /api/pessoas: {e}")
         return jsonify([])
 
 @app.route('/api/deletar_pessoa/<int:pessoa_id>', methods=['DELETE'])
@@ -494,15 +538,24 @@ def deletar_pessoa(pessoa_id):
         conn.commit()
         conn.close()
         
+        print(f"🗑️ Pessoa removida: ID {pessoa_id}")
         return jsonify({"success": True, "message": "Pessoa removida com sucesso"})
         
     except Exception as e:
+        print(f"❌ Erro em /api/deletar_pessoa: {e}")
         return jsonify({"error": f"Erro ao remover pessoa: {str(e)}"})
 
 @app.route('/health')
 def health_check():
     """Health check para Render"""
-    return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
+    return jsonify({
+        "status": "healthy", 
+        "timestamp": datetime.now().isoformat(),
+        "deepface_available": DEEPFACE_AVAILABLE,
+        "opencv_available": CV2_AVAILABLE,
+        "python_version": sys.version,
+        "environment": "Render" if 'RENDER' in os.environ else "Local"
+    })
 
 if __name__ == '__main__':
     print("🚀 Iniciando Face Confirmation System...")
@@ -514,4 +567,5 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     
+    print(f"📡 Iniciando servidor na porta {port}")
     app.run(host='0.0.0.0', port=port, debug=debug)

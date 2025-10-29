@@ -3,12 +3,20 @@ services:
     name: face-confirmation
     env: python
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120 app:app
     envVars:
       - key: DATABASE_URL
-        value: postgresql://neondb_owner:npg_6mDK2ZfuOEXU@ep-purple-bonus-ac0zdopi-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require
+        value: sua_string_de_conexao_aqui
       - key: SECRET_KEY
         generateValue: true
       - key: FLASK_DEBUG
         value: false
+      - key: TF_CPP_MIN_LOG_LEVEL
+        value: "3"
+      - key: OPENCV_LOG_LEVEL
+        value: "ERROR"
+      - key: CUDA_VISIBLE_DEVICES
+        value: "-1"
