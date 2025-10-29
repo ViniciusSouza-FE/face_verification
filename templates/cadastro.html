@@ -62,7 +62,7 @@
                 style="font-size: 3rem; margin-bottom: 1rem"
               ></i>
               <p id="fileLabel">Clique para selecionar uma foto</p>
-              <small>Formatos: JPG, PNG, GIF</small>
+              <small>Formatos: JPG, PNG, GIF (máx 2MB)</small>
             </div>
             <input
               type="file"
@@ -91,6 +91,7 @@
           type="submit"
           class="btn btn-primary"
           style="padding: 1rem 2rem"
+          id="submitBtn"
         >
           <i class="fas fa-save"></i> Cadastrar Pessoa
         </button>
@@ -99,7 +100,8 @@
 
     <div class="loading" id="cadastroLoading">
       <div class="spinner"></div>
-      <p>Extraindo embedding e cadastrando...</p>
+      <p>Processando imagem e cadastrando...</p>
+      <small>Isso pode levar alguns segundos</small>
     </div>
 
     <div class="result-container" id="cadastroSuccess" style="display: none">
@@ -123,11 +125,19 @@
   const loading = document.getElementById("cadastroLoading");
   const successDiv = document.getElementById("cadastroSuccess");
   const errorDiv = document.getElementById("cadastroError");
+  const submitBtn = document.getElementById("submitBtn");
 
   // Preview da imagem selecionada
   fotoInput.addEventListener("change", function () {
     const file = this.files[0];
     if (file) {
+      // Verifica tamanho do arquivo (máx 2MB)
+      if (file.size > 2 * 1024 * 1024) {
+        showCadastroError("A imagem deve ter no máximo 2MB");
+        this.value = "";
+        return;
+      }
+
       fileLabel.textContent = file.name;
       const reader = new FileReader();
 
@@ -160,6 +170,11 @@
       return;
     }
 
+    // Desabilita o botão para evitar múltiplos cliques
+    submitBtn.disabled = true;
+    submitBtn.innerHTML =
+      '<i class="fas fa-spinner fa-spin"></i> Processando...';
+
     loading.style.display = "block";
     successDiv.style.display = "none";
     errorDiv.style.display = "none";
@@ -170,7 +185,16 @@
         body: formData,
       });
 
-      const result = await response.json();
+      // Verifica se a resposta é JSON válido
+      const text = await response.text();
+      let result;
+
+      try {
+        result = JSON.parse(text);
+      } catch (parseError) {
+        console.error("Resposta não é JSON válido:", text);
+        throw new Error("Resposta inválida do servidor. Tente novamente.");
+      }
 
       if (result.success) {
         showCadastroSuccess(result.message);
@@ -178,12 +202,15 @@
         imagePreview.style.display = "none";
         fileLabel.textContent = "Clique para selecionar uma foto";
       } else {
-        showCadastroError(result.error);
+        showCadastroError(result.error || "Erro desconhecido");
       }
     } catch (error) {
+      console.error("Erro no cadastro:", error);
       showCadastroError("Erro ao cadastrar: " + error.message);
     } finally {
       loading.style.display = "none";
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="fas fa-save"></i> Cadastrar Pessoa';
     }
   });
 
