@@ -1,4 +1,3 @@
-# app.py - VERSÃO ATUALIZADA
 import os
 import sys
 import pickle
@@ -26,15 +25,21 @@ import io
 from PIL import Image
 import uuid
 import psycopg2
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 # Tenta importar DeepFace apenas se OpenCV estiver disponível
 if CV2_AVAILABLE:
-    from deepface import DeepFace
+    try:
+        from deepface import DeepFace
+        DEEPFACE_AVAILABLE = True
+        print("✅ DeepFace carregado")
+    except ImportError as e:
+        print(f"❌ DeepFace não disponível: {e}")
+        DEEPFACE_AVAILABLE = False
 else:
     DeepFace = None
-    print("⚠️ DeepFace não disponível - funcionalidades limitadas")
+    DEEPFACE_AVAILABLE = False
 
 load_dotenv()
 
@@ -115,7 +120,7 @@ def base64_to_image(base64_string):
 
 def extract_embedding(image_path):
     """Extrai embedding facial usando DeepFace"""
-    if not DeepFace:
+    if not DEEPFACE_AVAILABLE:
         return None
     
     try:
@@ -138,7 +143,7 @@ def extract_embedding(image_path):
 
 def facial_recognition_from_embedding(image_path):
     """Realiza reconhecimento facial comparando embeddings"""
-    if not DeepFace:
+    if not DEEPFACE_AVAILABLE:
         return {"error": "Sistema de reconhecimento não disponível"}
     
     try:
@@ -268,6 +273,12 @@ def pessoas():
 @app.route('/estatisticas')
 def estatisticas():
     """Página de estatísticas"""
+    return render_template('estatisticas.html')
+
+# APIs
+@app.route('/api/estatisticas', methods=['GET'])
+def api_estatisticas():
+    """API para estatísticas"""
     try:
         conn = get_db_connection()
         if not conn:
@@ -309,7 +320,6 @@ def estatisticas():
     except Exception as e:
         return jsonify({"error": str(e)})
 
-# APIs
 @app.route('/api/cadastrar_pessoa', methods=['POST'])
 def cadastrar_pessoa():
     """API para cadastrar nova pessoa com embedding"""
@@ -375,7 +385,7 @@ def cadastrar_pessoa():
 @app.route('/api/recognize_upload', methods=['POST'])
 def recognize_upload():
     """Reconhecimento por upload de arquivo"""
-    if not DeepFace:
+    if not DEEPFACE_AVAILABLE:
         return jsonify({"error": "Sistema de reconhecimento facial não disponível no momento"})
     
     try:
@@ -413,7 +423,7 @@ def recognize_upload():
 @app.route('/api/recognize_camera', methods=['POST'])
 def recognize_camera():
     """Reconhecimento por câmera"""
-    if not DeepFace:
+    if not DEEPFACE_AVAILABLE:
         return jsonify({"error": "Sistema de reconhecimento facial não disponível no momento"})
     
     try:
@@ -489,12 +499,15 @@ def deletar_pessoa(pessoa_id):
     except Exception as e:
         return jsonify({"error": f"Erro ao remover pessoa: {str(e)}"})
 
+@app.route('/health')
+def health_check():
+    """Health check para Render"""
+    return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
+
 if __name__ == '__main__':
     print("🚀 Iniciando Face Confirmation System...")
-    if not CV2_AVAILABLE:
-        print("⚠️ AVISO: OpenCV não está disponível. Funcionalidades de reconhecimento limitadas.")
-    else:
-        print("✅ OpenCV carregado com sucesso")
+    print(f"✅ DeepFace disponível: {DEEPFACE_AVAILABLE}")
+    print(f"✅ OpenCV disponível: {CV2_AVAILABLE}")
     
     init_database()
     
