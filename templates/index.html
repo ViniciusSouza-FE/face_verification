@@ -1,0 +1,228 @@
+{% extends "base.html" %} {% block content %}
+<div class="card">
+  <div class="card-header">
+    <h1><i class="fas fa-user-check"></i> Confirmação Facial</h1>
+    <p>Identifique pessoas usando IA através de upload ou câmera</p>
+  </div>
+
+  <div class="card-body">
+    <div class="grid grid-2">
+      <!-- Método 1: Upload de Arquivo -->
+      <div class="method-card">
+        <div class="method-icon">
+          <i class="fas fa-file-upload"></i>
+        </div>
+        <h2>Upload de Imagem</h2>
+        <p>Selecione uma foto dos seus arquivos para identificar a pessoa</p>
+
+        <div class="form-group">
+          <div
+            class="file-input"
+            onclick="document.getElementById('fileInput').click()"
+          >
+            <i
+              class="fas fa-cloud-upload-alt"
+              style="font-size: 2rem; margin-bottom: 1rem"
+            ></i>
+            <p>Clique para selecionar uma imagem</p>
+            <small>Formatos: JPG, PNG, GIF</small>
+          </div>
+          <input
+            type="file"
+            id="fileInput"
+            accept="image/*"
+            style="display: none"
+          />
+        </div>
+
+        <button class="btn btn-primary" onclick="processUpload()">
+          <i class="fas fa-search"></i> Confirmar Identidade
+        </button>
+
+        <div class="loading" id="uploadLoading">
+          <div class="spinner"></div>
+          <p>Processando imagem...</p>
+        </div>
+      </div>
+
+      <!-- Método 2: Câmera -->
+      <div class="method-card">
+        <div class="method-icon">
+          <i class="fas fa-camera"></i>
+        </div>
+        <h2>Usar Câmera</h2>
+        <p>Capture uma foto usando a câmera do seu dispositivo</p>
+
+        <button class="btn btn-primary" onclick="startCamera()">
+          <i class="fas fa-camera"></i> Abrir Câmera
+        </button>
+
+        <div class="camera-container" id="cameraContainer">
+          <video id="video" autoplay playsinline></video>
+          <div
+            style="
+              margin-top: 1rem;
+              display: flex;
+              gap: 0.5rem;
+              justify-content: center;
+            "
+          >
+            <button class="btn btn-success" onclick="capturePhoto()">
+              <i class="fas fa-camera"></i> Capturar Foto
+            </button>
+            <button class="btn btn-secondary" onclick="stopCamera()">
+              <i class="fas fa-times"></i> Fechar Câmera
+            </button>
+          </div>
+        </div>
+
+        <div class="loading" id="cameraLoading">
+          <div class="spinner"></div>
+          <p>Processando foto...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resultados -->
+    <div class="result-container" id="resultContainer">
+      <h3><i class="fas fa-check-circle"></i> Identidade Confirmada!</h3>
+      <div id="resultMessage"></div>
+      <div id="resultPerson" style="margin: 1rem 0"></div>
+      <p><strong>Confiança:</strong> <span id="resultConfidence"></span>%</p>
+    </div>
+
+    <div class="error-container" id="errorContainer">
+      <h3><i class="fas fa-exclamation-circle"></i> Erro</h3>
+      <p id="errorMessage"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+  let stream = null;
+
+  // Elementos DOM
+  const video = document.getElementById("video");
+  const cameraContainer = document.getElementById("cameraContainer");
+  const fileInput = document.getElementById("fileInput");
+  const uploadLoading = document.getElementById("uploadLoading");
+  const cameraLoading = document.getElementById("cameraLoading");
+
+  // Iniciar câmera
+  async function startCamera() {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: "user",
+        },
+      });
+      video.srcObject = stream;
+      cameraContainer.style.display = "block";
+    } catch (err) {
+      showError("Erro ao acessar a câmera: " + err.message);
+    }
+  }
+
+  // Parar câmera
+  function stopCamera() {
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      stream = null;
+    }
+    cameraContainer.style.display = "none";
+  }
+
+  // Capturar foto da câmera
+  function capturePhoto() {
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext("2d");
+    context.drawImage(video, 0, 0);
+
+    const imageData = canvas.toDataURL("image/jpeg");
+    processCameraImage(imageData);
+  }
+
+  // Processar imagem da câmera
+  async function processCameraImage(imageData) {
+    showLoading(cameraLoading);
+    hideResults();
+
+    try {
+      const response = await fetch("/api/recognize_camera", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ image: imageData }),
+      });
+
+      const result = await response.json();
+      handleRecognitionResult(result);
+    } catch (error) {
+      showError("Erro ao processar imagem: " + error.message);
+    } finally {
+      hideLoading(cameraLoading);
+      stopCamera();
+    }
+  }
+
+  // Processar upload de arquivo
+  async function processUpload() {
+    const file = fileInput.files[0];
+    if (!file) {
+      showError("Por favor, selecione uma imagem");
+      return;
+    }
+
+    showLoading(uploadLoading);
+    hideResults();
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await fetch("/api/recognize_upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+      handleRecognitionResult(result);
+    } catch (error) {
+      showError("Erro ao processar arquivo: " + error.message);
+    } finally {
+      hideLoading(uploadLoading);
+    }
+  }
+
+  // Lidar com o resultado do reconhecimento
+  function handleRecognitionResult(result) {
+    if (result.error) {
+      showError(result.error);
+    } else if (result.success) {
+      showResult(
+        "Identidade confirmada com sucesso!",
+        result.confidence,
+        result.person
+      );
+    } else {
+      showError(result.message || "Pessoa não identificada na base de dados");
+    }
+  }
+
+  // Event listener para mudança de arquivo
+  fileInput.addEventListener("change", function () {
+    if (this.files[0]) {
+      const fileName = this.files[0].name;
+      document.querySelector(
+        ".file-input p"
+      ).textContent = `Arquivo selecionado: ${fileName}`;
+    }
+    hideResults();
+  });
+</script>
+{% endblock %}
