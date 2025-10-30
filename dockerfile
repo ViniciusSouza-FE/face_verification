@@ -1,18 +1,20 @@
-FROM python:3.11-slim-bullseye
+# MUDANÇA 1: Usando a imagem base completa em vez da 'slim' para incluir mais bibliotecas.
+FROM python:3.11-bullseye
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Instalação robusta e completa das dependências do sistema para OpenCV
-# libgl1-mesa-glx: Fornece o libGL.so.1, que é a causa exata do erro.
-# libglib2.0-0: Dependência comum de várias bibliotecas de baixo nível.
-# Outras libs: Bibliotecas de suporte que podem ser chamadas indiretamente.
+# Instalação das dependências do sistema.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-glx \
     libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender1 \
     && rm -rf /var/lib/apt/lists/*
+
+# MUDANÇA 2: Comando de depuração para verificar se a biblioteca foi instalada.
+# Este comando será executado durante o build no Railway.
+RUN echo "--- Verificando a instalação da biblioteca libGL.so.1 ---" && \
+    find / -name "libGL.so.1" 2>/dev/null && \
+    echo "--- Verificação concluída ---" || \
+    echo "--- ALERTA: libGL.so.1 NÃO FOI ENCONTRADO APÓS A INSTALAÇÃO! ---"
 
 WORKDIR /app
 
