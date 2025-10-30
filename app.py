@@ -117,17 +117,50 @@ def get_db_connection():
 
 def init_database():
     try:
+        print("🔄 Iniciando inicialização do banco de dados...")
         conn = get_db_connection()
-        if conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS pessoas (
-                    id SERIAL PRIMARY KEY, nome VARCHAR(255) NOT NULL, email VARCHAR(255),
-                    telefone VARCHAR(50), documento VARCHAR(20) NOT NULL UNIQUE,
-                    embedding BYTEA, data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    ativo BOOLEAN DEFAULT true
-                )
-            """)
+        if not conn:
+            print("❌ Não foi possível conectar ao banco de dados")
+            return
+        
+        cursor = conn.cursor()
+        
+        # Criando tabela pessoas
+        print("🔄 Criando tabela pessoas...")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS pessoas (
+            id SERIAL PRIMARY KEY,
+            nome VARCHAR(255) NOT NULL,
+            email VARCHAR(255),
+            telefone VARCHAR(50),
+            documento VARCHAR(20) NOT NULL UNIQUE,
+            embedding BYTEA,
+            data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            ativo BOOLEAN DEFAULT true
+        )
+        """)
+        
+        # Criando tabela de registros
+        print("🔄 Criando tabela registros_reconhecimento...")
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS registros_reconhecimento (
+            id SERIAL PRIMARY KEY,
+            pessoa_id INTEGER REFERENCES pessoas(id),
+            metodo VARCHAR(50),
+            confianca DECIMAL(5,2),
+            data_reconhecimento TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print("✅ Banco de dados inicializado com sucesso!")
+        
+    except Exception as e:
+        print(f"❌ Erro ao inicializar banco de dados: {str(e)}")
+        if 'conn' in locals() and conn:
+            conn.close()
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS registros_reconhecimento (
                     id SERIAL PRIMARY KEY, pessoa_id INTEGER REFERENCES pessoas(id),
@@ -138,7 +171,7 @@ def init_database():
             conn.commit()
             cursor.close()
             conn.close()
-            print("✅ Banco de dados inicializado com sucesso!")
+            print("✅ Banco de dados inicializdo com sucesso!")
     except Exception as e:
         print(f"⚠️ Aviso ao inicializar banco: {e}")
 
@@ -477,8 +510,10 @@ def health_check():
         "opencv_available": CV2_AVAILABLE, "python_version": sys.version.split()[0],
     })
 
+# Inicialização do banco de dados ao carregar o aplicativo
+init_database()
+
 if __name__ == '__main__':
     print("🚀 Iniciando Face Confirmation System...")
-    init_database()
     port = int(os.environ.get('PORT', 8080))
     print(f"📡 O servidor será iniciado pelo Gunicorn na porta {port}.")
