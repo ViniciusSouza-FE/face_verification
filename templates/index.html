@@ -113,12 +113,41 @@
       <div id="resultMessage"></div>
       <div id="resultPerson" style="margin: 1rem 0"></div>
       <div class="confidence-info">
-        <p><strong>Confiança:</strong> <span id="resultConfidence"></span>%</p>
-        <p id="similarityWarning" style="color: #ff6b6b; display: none; margin-top: 0.5rem;">
-          ⚠️ A similaridade está abaixo de 60%. Verifique cuidadosamente se a pessoa é realmente quem diz ser.
+        <p>
+          <strong>Confiança:</strong> 
+          <span id="resultConfidence"></span>%
+          <span class="confidence-indicator" style="margin-left: 10px; font-size: 0.9em;">
+            (Alta: ≥80% | Média: 60-79% | Baixa: <60%)
+          </span>
+        </p>
+        <p id="similarityWarning" style="margin-top: 0.5rem; font-weight: bold;">
         </p>
       </div>
     </div>
+
+    <style>
+      .confidence-indicator {
+        color: #666;
+        font-style: italic;
+      }
+      .confidence-level {
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-weight: bold;
+      }
+      .confidence-high {
+        background-color: #d4edda;
+        color: #28a745;
+      }
+      .confidence-medium {
+        background-color: #fff3cd;
+        color: #856404;
+      }
+      .confidence-low {
+        background-color: #f8d7da;
+        color: #dc3545;
+      }
+    </style>
 
     <div class="error-container" id="errorContainer">
       <h3><i class="fas fa-exclamation-circle"></i> Erro</h3>
@@ -250,22 +279,27 @@
     if (result.error) {
       showError(result.error);
     } else if (result.success) {
-      let message = result.warning 
-        ? "⚠️ ATENÇÃO: Baixa similaridade detectada!"
-        : "✅ Identidade confirmada com sucesso!";
+      const confidence = result.confidence;
+      let message, color;
       
-      showResult(
-        message,
-        result.confidence,
-        result.person,
-        result.warning
-      );
+      if (confidence >= 80) {
+        message = "✅ Alta similaridade detectada!";
+        color = "#28a745"; // Verde
+      } else if (confidence >= 60) {
+        message = "⚠️ Similaridade média detectada!";
+        color = "#ffc107"; // Amarelo
+      } else {
+        message = "❌ Baixa similaridade detectada!";
+        color = "#dc3545"; // Vermelho
+      }
+      
+      showResult(message, confidence, result.person, confidence < 60, color);
     } else {
-      showError(result.message || "Pessoa não identificada na base de dados");
+      showError(result.message || "Pessoa não identificrada na base de dados");
     }
   }
 
-  function showResult(message, confidence, person, isLowSimilarity) {
+  function showResult(message, confidence, person, isLowSimilarity, color) {
     const resultContainer = document.getElementById("resultContainer");
     const errorContainer = document.getElementById("errorContainer");
     const resultTitle = document.getElementById("resultTitle");
@@ -274,12 +308,18 @@
     const resultConfidence = document.getElementById("resultConfidence");
     const similarityWarning = document.getElementById("similarityWarning");
 
-    // Define o ícone e a cor baseado na similaridade
-    const icon = isLowSimilarity ? "exclamation-triangle" : "check-circle";
-    const titleColor = isLowSimilarity ? "#ff6b6b" : "#28a745";
+    // Define o ícone baseado no nível de similaridade
+    let icon;
+    if (confidence >= 80) {
+      icon = "check-circle";
+    } else if (confidence >= 60) {
+      icon = "exclamation-circle";
+    } else {
+      icon = "exclamation-triangle";
+    }
 
     resultTitle.innerHTML = `<i class="fas fa-${icon}"></i> ${message}`;
-    resultTitle.style.color = titleColor;
+    resultTitle.style.color = color;
     
     // Informações da pessoa
     resultPerson.innerHTML = `

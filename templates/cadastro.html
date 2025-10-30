@@ -60,31 +60,56 @@
             <label class="form-label">
               <i class="fas fa-camera"></i> Foto para Extração de Embedding *
             </label>
-            <div
-              class="file-input"
-              onclick="document.getElementById('foto').click()"
-              style="
-                height: 200px;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-              "
-            >
-              <i
-                class="fas fa-cloud-upload-alt"
-                style="font-size: 3rem; margin-bottom: 1rem"
-              ></i>
-              <p id="fileLabel">Clique para selecionar uma foto</p>
-              <small>Formatos: JPG, PNG, GIF (máx 2MB)</small>
+            
+            <!-- Botões de escolha do método -->
+            <div style="margin-bottom: 1rem; text-align: center;">
+              <button type="button" class="btn btn-secondary" onclick="toggleUploadMethod('file')" id="btnFile">
+                <i class="fas fa-file-upload"></i> Upload de Arquivo
+              </button>
+              <button type="button" class="btn btn-secondary" onclick="toggleUploadMethod('camera')" id="btnCamera">
+                <i class="fas fa-camera"></i> Usar Câmera
+              </button>
             </div>
-            <input
-              type="file"
-              id="foto"
-              name="foto"
-              accept="image/*"
-              style="display: none"
-              required
-            />
+
+            <!-- Área de Upload -->
+            <div id="fileUploadArea">
+              <div
+                class="file-input"
+                onclick="document.getElementById('foto').click()"
+                style="
+                  height: 200px;
+                  display: flex;
+                  flex-direction: column;
+                  justify-content: center;
+                "
+              >
+                <i
+                  class="fas fa-cloud-upload-alt"
+                  style="font-size: 3rem; margin-bottom: 1rem"
+                ></i>
+                <p id="fileLabel">Clique para selecionar uma foto</p>
+                <small>Formatos: JPG, PNG, GIF (máx 2MB)</small>
+              </div>
+              <input
+                type="file"
+                id="foto"
+                name="foto"
+                accept="image/*"
+                style="display: none"
+                required
+              />
+            </div>
+
+            <!-- Área da Câmera -->
+            <div id="cameraArea" style="display: none; text-align: center;">
+              <video id="video" autoplay playsinline style="width: 100%; max-width: 400px; border-radius: 10px;"></video>
+              <div style="margin-top: 1rem;">
+                <button type="button" class="btn btn-success" onclick="capturarFoto()">
+                  <i class="fas fa-camera"></i> Capturar Foto
+                </button>
+              </div>
+              <canvas id="canvas" style="display: none;"></canvas>
+            </div>
           </div>
 
           <div
@@ -95,6 +120,11 @@
               id="preview"
               style="max-width: 200px; max-height: 200px; border-radius: 10px"
             />
+            <div style="margin-top: 0.5rem;">
+              <button type="button" class="btn btn-danger" onclick="removerFoto()">
+                <i class="fas fa-trash"></i> Remover Foto
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -139,6 +169,9 @@
   const successDiv = document.getElementById("cadastroSuccess");
   const errorDiv = document.getElementById("cadastroError");
   const submitBtn = document.getElementById("submitBtn");
+  const video = document.getElementById("video");
+  const canvas = document.getElementById("canvas");
+  let stream = null;
 
   // Preview da imagem selecionada
   fotoInput.addEventListener("change", function () {
@@ -238,5 +271,86 @@
     errorDiv.style.display = "block";
     successDiv.style.display = "none";
   }
+
+  // Funções para a câmera
+  async function iniciarCamera() {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: "user"
+        }
+      });
+      video.srcObject = stream;
+    } catch (err) {
+      showCadastroError("Erro ao acessar a câmera: " + err.message);
+    }
+  }
+
+  function pararCamera() {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      stream = null;
+    }
+  }
+
+  function toggleUploadMethod(method) {
+    const fileArea = document.getElementById('fileUploadArea');
+    const cameraArea = document.getElementById('cameraArea');
+    const btnFile = document.getElementById('btnFile');
+    const btnCamera = document.getElementById('btnCamera');
+
+    if (method === 'file') {
+      fileArea.style.display = 'block';
+      cameraArea.style.display = 'none';
+      btnFile.classList.add('btn-primary');
+      btnFile.classList.remove('btn-secondary');
+      btnCamera.classList.add('btn-secondary');
+      btnCamera.classList.remove('btn-primary');
+      pararCamera();
+    } else {
+      fileArea.style.display = 'none';
+      cameraArea.style.display = 'block';
+      btnCamera.classList.add('btn-primary');
+      btnCamera.classList.remove('btn-secondary');
+      btnFile.classList.add('btn-secondary');
+      btnFile.classList.remove('btn-primary');
+      iniciarCamera();
+    }
+  }
+
+  function capturarFoto() {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext('2d');
+    context.drawImage(video, 0, 0);
+    const imageData = canvas.toDataURL('image/jpeg');
+    
+    // Converter base64 para arquivo
+    fetch(imageData)
+      .then(res => res.blob())
+      .then(blob => {
+        const file = new File([blob], "camera-photo.jpg", { type: "image/jpeg" });
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+        fotoInput.files = dataTransfer.files;
+        
+        preview.src = imageData;
+        imagePreview.style.display = "block";
+        pararCamera();
+        toggleUploadMethod('file');
+      });
+  }
+
+  function removerFoto() {
+    fotoInput.value = '';
+    preview.src = '';
+    imagePreview.style.display = 'none';
+    fileLabel.textContent = 'Clique para selecionar uma foto';
+  }
+
+  // Limpar a câmera quando a página for fechada
+  window.addEventListener('beforeunload', pararCamera);
 </script>
 {% endblock %}
