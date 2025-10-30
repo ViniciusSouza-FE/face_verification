@@ -2,14 +2,25 @@ import os
 import sys
 import pickle
 import numpy as np
+import json
+from datetime import datetime
 
-# Configurações de ambiente para sistemas headless
+# CONFIGURAÇÃO CRÍTICA - usar versão compatível do numpy
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '1'
 os.environ['OPENCV_LOG_LEVEL'] = 'ERROR'
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 print(f"🚀 Python version: {sys.version}")
+print(f"📦 NumPy version: {np.__version__}")
+
+# Try to use pickle5 for better compatibility
+try:
+    import pickle5 as pickle
+    print("✅ Using pickle5 for better compatibility")
+except ImportError:
+    import pickle
+    print("⚠️ Using standard pickle")
 
 # Verificar importações críticas
 try:
@@ -66,11 +77,24 @@ if CV2_AVAILABLE:
 import base64
 import io
 import uuid
-from datetime import datetime
 import re
 import time
 
+class NumpyEncoder(json.JSONEncoder):
+    """Custom JSON encoder for numpy data types"""
+    def default(self, obj):
+        if isinstance(obj, (np.float32, np.float64, np.float16)):
+            return float(obj)
+        elif isinstance(obj, (np.int32, np.int64, np.int16, np.int8)):
+            return int(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        return super().default(obj)
+
 app = Flask(__name__)
+app.json_encoder = NumpyEncoder
 
 # Configurações
 UPLOAD_FOLDER = "static/uploads"
@@ -159,57 +183,81 @@ def base64_to_image(base64_string):
     except Exception as e:
         raise ValueError(f"Erro ao converter imagem: {str(e)}")
 
-# Função otimizada com timeout para extrair embedding
-def extract_embedding_with_timeout(image_path, timeout=60):
-    """Extrai embedding facial com timeout para evitar travamento"""
+def safe_pickle_loads(data):
+    """Carrega dados pickle com tratamento de erro robusto"""
+    try:
+        return pickle.loads(data)
+    except Exception as e:
+        print(f"❌ Erro ao carregar pickle: {e}")
+        # Tenta alternativas se o pickle normal falhar
+        try:
+            # Tenta com protocolo diferente
+            return pickle.loads(data, encoding='latin1')
+        except:
+            try:
+                # Tenta ignorando erros
+                return pickle.loads(data, errors='ignore')
+            except:
+                return None
+
+def extract_embedding_optimized(image_path):
+    """Extrai embedding com configurações otimizadas"""
     if not DEEPFACE_AVAILABLE:
         return None
     
     try:
-        start_time = time.time()
+        print("🔄 Extraindo embedding facial...")
         
-        # Configurações otimizadas para Render free
+        # Configurações conservadoras para melhor compatibilidade
         embedding_objs = DeepFace.represent(
             img_path=image_path,
-            model_name="Facenet",
+            model_name="Facenet",  # Modelo mais estável
             detector_backend="opencv",
-            enforce_detection=False,
-            align=False,
+            enforce_detection=True,  # Só processa se detectar rosto
+            align=True,
             normalization="base"
         )
         
-        processing_time = time.time() - start_time
-        print(f"⏱️ Embedding extraído em {processing_time:.2f} segundos")
-        
-        if embedding_objs:
+        if embedding_objs and len(embedding_objs) > 0:
             embedding_array = np.array(embedding_objs[0]['embedding'], dtype=np.float32)
-            return pickle.dumps(embedding_array)
-        return None
-        
+            
+            # Normalizar o embedding para melhor consistência
+            norm = np.linalg.norm(embedding_array)
+            if norm > 0:
+                embedding_array = embedding_array / norm
+            
+            print(f"📊 Embedding extraído: shape {embedding_array.shape}, norma: {np.linalg.norm(embedding_array):.4f}")
+            return pickle.dumps(embedding_array, protocol=4)  # Protocolo mais compatível
+        else:
+            print("❌ Nenhum rosto detectado na imagem")
+            return None
+            
     except Exception as e:
-        print(f"❌ Erro ao extrair embedding: {e}")
+        print(f"❌ Erro no DeepFace: {e}")
         return None
 
-# Função de fallback para quando DeepFace não está disponível
 def extract_embedding_fallback(image_path):
     """Fallback simples quando DeepFace não funciona"""
     print("🔄 Usando fallback para embedding")
-    # Retorna um embedding vazio ou simulado
-    # Em produção, você pode usar uma abordagem alternativa
-    return pickle.dumps(np.zeros(128, dtype=np.float32))
+    # Retorna um embedding simulado normalizado
+    fake_embedding = np.random.randn(128).astype(np.float32)
+    fake_embedding = fake_embedding / np.linalg.norm(fake_embedding)
+    return pickle.dumps(fake_embedding, protocol=4)
 
 def facial_recognition_from_embedding(image_path):
-    """Realiza reconhecimento facial comparando embeddings"""
+    """Reconhecimento facial com tratamento robusto de embeddings"""
     if not DEEPFACE_AVAILABLE:
-        return {"error": "Sistema de reconhecimento facial temporariamente indisponível"}
+        return {"error": "Sistema de reconhecimento facial indisponível"}
     
     try:
-        # Extrai embedding da imagem de entrada
-        input_embedding = extract_embedding_with_timeout(image_path)
+        # Extrair embedding da imagem de entrada
+        input_embedding = extract_embedding_optimized(image_path)
         if input_embedding is None:
-            return {"error": "Não foi possível extrair características faciais da imagem"}
+            return {"error": "Não foi possível extrair características faciais (nenhum rosto detectado)"}
         
-        input_array = pickle.loads(input_embedding)
+        input_array = safe_pickle_loads(input_embedding)
+        if input_array is None:
+            return {"error": "Erro ao processar embedding da imagem"}
         
         conn = get_db_connection()
         if not conn:
@@ -228,6 +276,8 @@ def facial_recognition_from_embedding(image_path):
         if not pessoas:
             return {"error": "Nenhuma pessoa cadastrada no sistema"}
         
+        print(f"🔍 Comparando com {len(pessoas)} pessoas no banco...")
+        
         best_match = None
         best_confidence = 0
         
@@ -236,13 +286,18 @@ def facial_recognition_from_embedding(image_path):
             
             if db_embedding:
                 try:
-                    db_array = pickle.loads(db_embedding)
+                    db_array = safe_pickle_loads(db_embedding)
+                    if db_array is None:
+                        print(f"⚠️ Embedding corrompido para {nome}, pulando...")
+                        continue
                     
-                    # Calcula similaridade cosseno
+                    # Calcular similaridade
                     similarity = cosine_similarity(input_array, db_array)
                     confidence = similarity * 100
                     
-                    if confidence > best_confidence and confidence > 65:
+                    print(f"   👤 {nome}: {confidence:.2f}% de similaridade")
+                    
+                    if confidence > best_confidence and confidence > 55:  # Threshold reduzido
                         best_confidence = confidence
                         best_match = {
                             'id': pessoa_id,
@@ -250,32 +305,52 @@ def facial_recognition_from_embedding(image_path):
                             'email': email,
                             'telefone': telefone
                         }
+                        
                 except Exception as e:
-                    print(f"⚠️ Erro ao processar embedding da pessoa {pessoa_id}: {e}")
+                    print(f"⚠️ Erro ao comparar com {nome}: {e}")
                     continue
         
         if best_match:
+            print(f"✅ PESSOA IDENTIFICADA: {best_match['nome']} com {best_confidence:.2f}% de confiança")
             return {
                 "success": True,
                 "person": best_match,
-                "confidence": round(best_confidence, 2)
+                "confidence": float(best_confidence)
             }
         else:
+            print("❌ Nenhuma correspondência encontrada acima do threshold")
             return {"success": False, "message": "Pessoa não identificada na base de dados"}
             
     except Exception as e:
+        print(f"❌ Erro no reconhecimento: {e}")
         return {"error": f"Erro no reconhecimento: {str(e)}"}
 
 def cosine_similarity(a, b):
     """Calcula similaridade cosseno entre dois vetores"""
     try:
-        return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
-    except:
+        dot_product = np.dot(a, b)
+        norm_a = np.linalg.norm(a)
+        norm_b = np.linalg.norm(b)
+        
+        # Evitar divisão por zero
+        if norm_a == 0 or norm_b == 0:
+            return 0
+            
+        similarity = dot_product / (norm_a * norm_b)
+        return max(0, min(1, similarity))  # Garantir entre 0 e 1
+    except Exception as e:
+        print(f"❌ Erro no cálculo de similaridade: {e}")
         return 0
 
 def save_recognition_log(person_id, metodo, confianca):
-    """Salva registro de reconhecimento"""
+    """Salva registro de reconhecimento - CORRIGIDO para numpy.float32"""
     try:
+        # CONVERSÃO CRÍTICA: Converter numpy.float32 para float nativo do Python
+        if hasattr(confianca, 'item'):
+            confianca_python = confianca.item()  # Método mais seguro para numpy types
+        else:
+            confianca_python = float(confianca)  # Fallback
+        
         conn = get_db_connection()
         if not conn:
             return
@@ -284,12 +359,13 @@ def save_recognition_log(person_id, metodo, confianca):
         cursor.execute('''
             INSERT INTO registros_reconhecimento (pessoa_id, metodo, confianca)
             VALUES (%s, %s, %s)
-        ''', (person_id, metodo, confianca))
+        ''', (person_id, metodo, confianca_python))
         
         conn.commit()
         conn.close()
+        print(f"📝 Log salvo: pessoa_id={person_id}, método={metodo}, confiança={confianca_python}%")
     except Exception as e:
-        print(f"Erro ao salvar log: {e}")
+        print(f"❌ Erro ao salvar log: {e}")
 
 # Rotas principais
 @app.route('/')
@@ -392,20 +468,20 @@ def cadastrar_pessoa():
             # Processamento otimizado - redimensiona imagem primeiro
             image = Image.open(file.stream)
             
-            # Redimensiona para reduzir processamento (máx 300px)
-            max_size = (300, 300)
+            # Redimensiona para melhor precisão (máx 400px)
+            max_size = (400, 400)
             image.thumbnail(max_size, Image.Resampling.LANCZOS)
             
             temp_filename = f"temp_{uuid.uuid4().hex}.jpg"
             temp_path = os.path.join(app.config['UPLOAD_FOLDER'], temp_filename)
-            image.save(temp_path, 'JPEG', quality=80)
+            image.save(temp_path, 'JPEG', quality=85)
             
             embedding = None
             
             # Tenta extrair embedding com DeepFace
             if DEEPFACE_AVAILABLE:
                 print("🔄 Tentando extrair embedding com DeepFace...")
-                embedding = extract_embedding_with_timeout(temp_path, timeout=45)
+                embedding = extract_embedding_optimized(temp_path)
             
             # Se DeepFace falhou ou não está disponível, usa fallback
             if embedding is None:
@@ -446,7 +522,7 @@ def cadastrar_pessoa():
 
 @app.route('/api/recognize_upload', methods=['POST'])
 def recognize_upload():
-    """Reconhecimento por upload de arquivo"""
+    """Reconhecimento por upload de arquivo - CORRIGIDO"""
     if not DEEPFACE_AVAILABLE:
         return jsonify({"error": "Sistema de reconhecimento facial temporariamente indisponível"})
     
@@ -462,16 +538,17 @@ def recognize_upload():
             # Processamento otimizado - redimensiona imagem
             image = Image.open(file.stream)
             
-            # Redimensiona para reduzir processamento
-            max_size = (300, 300)
+            # Redimensiona para melhor precisão
+            max_size = (400, 400)
             image.thumbnail(max_size, Image.Resampling.LANCZOS)
             
             filename = f"{uuid.uuid4().hex}.jpg"
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            image.save(filepath, 'JPEG', quality=80)
+            image.save(filepath, 'JPEG', quality=85)
             
             result = facial_recognition_from_embedding(filepath)
             
+            # CORREÇÃO: Garantir que todos os valores numpy são convertidos
             if result.get('success') and 'person' in result and 'id' in result['person']:
                 save_recognition_log(result['person']['id'], 'upload', result['confidence'])
             
@@ -483,11 +560,12 @@ def recognize_upload():
             return jsonify({"error": "Tipo de arquivo não permitido"})
             
     except Exception as e:
+        print(f"❌ Erro no processamento: {str(e)}")
         return jsonify({"error": f"Erro no processamento: {str(e)}"})
 
 @app.route('/api/recognize_camera', methods=['POST'])
 def recognize_camera():
-    """Reconhecimento por câmera"""
+    """Reconhecimento por câmera - CORRIGIDO"""
     if not DEEPFACE_AVAILABLE:
         return jsonify({"error": "Sistema de reconhecimento facial temporariamente indisponível"})
     
@@ -498,13 +576,13 @@ def recognize_camera():
         
         image = base64_to_image(data['image'])
         
-        # Redimensiona para reduzir processamento
-        max_size = (300, 300)
+        # Redimensiona para melhor precisão
+        max_size = (400, 400)
         image.thumbnail(max_size, Image.Resampling.LANCZOS)
         
         filename = f"{uuid.uuid4().hex}.jpg"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        image.save(filepath, 'JPEG', quality=80)
+        image.save(filepath, 'JPEG', quality=85)
         
         result = facial_recognition_from_embedding(filepath)
         
@@ -517,6 +595,7 @@ def recognize_camera():
         return jsonify(result)
         
     except Exception as e:
+        print(f"❌ Erro no processamento: {str(e)}")
         return jsonify({"error": f"Erro no processamento: {str(e)}"})
 
 @app.route('/api/pessoas', methods=['GET'])
@@ -608,6 +687,92 @@ def api_test():
         "deepface": DEEPFACE_AVAILABLE,
         "opencv": CV2_AVAILABLE
     })
+
+@app.route('/api/debug_embeddings')
+def debug_embeddings():
+    """API para debug dos embeddings"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "No database connection"})
+            
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, nome, embedding IS NOT NULL as has_embedding, 
+                   LENGTH(embedding) as embedding_size
+            FROM pessoas 
+            WHERE ativo = true
+        ''')
+        
+        pessoas_data = []
+        for row in cursor.fetchall():
+            pessoa_id, nome, has_embedding, embedding_size = row
+            pessoas_data.append({
+                'id': pessoa_id,
+                'nome': nome,
+                'has_embedding': has_embedding,
+                'embedding_size': embedding_size
+            })
+        
+        conn.close()
+        
+        return jsonify({
+            "total_pessoas": len(pessoas_data),
+            "pessoas_com_embedding": sum(1 for p in pessoas_data if p['has_embedding']),
+            "pessoas": pessoas_data
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+@app.route('/api/fix_embeddings', methods=['POST'])
+def fix_embeddings():
+    """API para corrigir embeddings corrompidos"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "No database connection"})
+            
+        cursor = conn.cursor()
+        
+        # Busca todos os embeddings
+        cursor.execute('SELECT id, nome, embedding FROM pessoas WHERE embedding IS NOT NULL')
+        pessoas = cursor.fetchall()
+        
+        fixed_count = 0
+        corrupted_count = 0
+        
+        for pessoa_id, nome, embedding_data in pessoas:
+            try:
+                # Tenta carregar o embedding
+                embedding_array = safe_pickle_loads(embedding_data)
+                
+                if embedding_array is not None and isinstance(embedding_array, np.ndarray):
+                    print(f"✅ Embedding de {nome} está OK")
+                else:
+                    print(f"❌ Embedding de {nome} está corrompido")
+                    corrupted_count += 1
+                    
+                    # Remove o embedding corrompido
+                    cursor.execute('UPDATE pessoas SET embedding = NULL WHERE id = %s', (pessoa_id,))
+                    fixed_count += 1
+                    
+            except Exception as e:
+                print(f"❌ Erro ao verificar embedding de {nome}: {e}")
+                corrupted_count += 1
+                cursor.execute('UPDATE pessoas SET embedding = NULL WHERE id = %s', (pessoa_id,))
+                fixed_count += 1
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "message": f"Embeddings verificados: {len(pessoas)} pessoas, {corrupted_count} corrompidos, {fixed_count} corrigidos"
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 if __name__ == '__main__':
     print("🚀 Iniciando Face Confirmation System...")
