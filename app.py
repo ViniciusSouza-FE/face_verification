@@ -82,8 +82,12 @@ class NumpyEncoder(json.JSONEncoder):
             return int(obj)
         elif isinstance(obj, np.ndarray):
             return obj.tolist()
-        elif isinstance(obj, np.bool_):
+        elif isinstance(obj, (np.bool_, bool)):
             return bool(obj)
+        elif isinstance(obj, dict):
+            return {str(key): self.default(value) for key, value in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [self.default(item) for item in obj]
         return super().default(obj)
 
 app = Flask(__name__)
