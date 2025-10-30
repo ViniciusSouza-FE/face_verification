@@ -136,22 +136,23 @@
         border-radius: 8px;
         padding: 20px;
       }
+      #resultTitle {
+        margin-bottom: 15px;
+      }
       .confidence-level {
         padding: 3px 8px;
         border-radius: 4px;
         font-weight: bold;
       }
-      .confidence-high {
-        background-color: #d4edda;
-        color: #28a745;
+      /* Removendo as classes não utilizadas */
+      #resultContainer[style*="background-color: #d4edda"] #resultTitle {
+        color: #28a745 !important;
       }
-      .confidence-medium {
-        background-color: #fff3cd;
-        color: #856404;
+      #resultContainer[style*="background-color: #fff3cd"] #resultTitle {
+        color: #856404 !important;
       }
-      .confidence-low {
-        background-color: #f8d7da;
-        color: #dc3545;
+      #resultContainer[style*="background-color: #f8d7da"] #resultTitle {
+        color: #dc3545 !important;
       }
     </style>
 
@@ -289,15 +290,15 @@
       let message, color, bgColor;
       
       if (confidence >= 80) {
-        message = "✅ Alta similaridade detectada!";
+        message = "Alta similaridade detectada!";
         color = "#28a745"; // Verde
         bgColor = "#d4edda";
       } else if (confidence >= 60) {
-        message = "⚠️ Similaridade média detectada!";
+        message = "Similaridade média detectada!";
         color = "#856404"; // Amarelo
         bgColor = "#fff3cd";
       } else {
-        message = "❌ Baixa similaridade detectada!";
+        message = "Baixa similaridade detectada!";
         color = "#dc3545"; // Vermelho
         bgColor = "#f8d7da";
       }
@@ -317,17 +318,7 @@
     const resultConfidence = document.getElementById("resultConfidence");
     const similarityWarning = document.getElementById("similarityWarning");
 
-    // Define o ícone baseado no nível de similaridade
-    let icon;
-    if (confidence >= 80) {
-      icon = "check-circle";
-    } else if (confidence >= 60) {
-      icon = "exclamation-circle";
-    } else {
-      icon = "exclamation-triangle";
-    }
-
-    resultTitle.innerHTML = `<i class="fas fa-${icon}"></i> ${message}`;
+    resultTitle.textContent = message;
     resultTitle.style.color = color;
     
     // Informações da pessoa
