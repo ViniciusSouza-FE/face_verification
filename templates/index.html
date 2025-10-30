@@ -115,7 +115,7 @@
       <div class="confidence-info">
         <p>
           <strong>Confiança:</strong> 
-          <span id="resultConfidence"></span>%
+          <span id="resultConfidence"></span>
           <span class="confidence-indicator" style="margin-left: 10px; font-size: 0.9em;">
             (Alta: ≥80% | Média: 60-79% | Baixa: <60%)
           </span>
@@ -129,6 +129,12 @@
       .confidence-indicator {
         color: #666;
         font-style: italic;
+      }
+      .result-container {
+        transition: all 0.3s ease-in-out;
+        border: 1px solid;
+        border-radius: 8px;
+        padding: 20px;
       }
       .confidence-level {
         padding: 3px 8px;
@@ -280,26 +286,29 @@
       showError(result.error);
     } else if (result.success) {
       const confidence = result.confidence;
-      let message, color;
+      let message, color, bgColor;
       
       if (confidence >= 80) {
         message = "✅ Alta similaridade detectada!";
         color = "#28a745"; // Verde
+        bgColor = "#d4edda";
       } else if (confidence >= 60) {
         message = "⚠️ Similaridade média detectada!";
-        color = "#ffc107"; // Amarelo
+        color = "#856404"; // Amarelo
+        bgColor = "#fff3cd";
       } else {
         message = "❌ Baixa similaridade detectada!";
         color = "#dc3545"; // Vermelho
+        bgColor = "#f8d7da";
       }
       
-      showResult(message, confidence, result.person, confidence < 60, color);
+      showResult(message, confidence, result.person, confidence < 60, color, bgColor);
     } else {
       showError(result.message || "Pessoa não identificrada na base de dados");
     }
   }
 
-  function showResult(message, confidence, person, isLowSimilarity, color) {
+  function showResult(message, confidence, person, isLowSimilarity, color, bgColor) {
     const resultContainer = document.getElementById("resultContainer");
     const errorContainer = document.getElementById("errorContainer");
     const resultTitle = document.getElementById("resultTitle");
@@ -328,9 +337,12 @@
       ${person.telefone ? `<p><strong>Telefone:</strong> ${person.telefone}</p>` : ''}
     `;
     
-    resultConfidence.textContent = confidence.toFixed(2);
+    resultConfidence.textContent = confidence.toFixed(1) + '%';
     similarityWarning.style.display = isLowSimilarity ? "block" : "none";
 
+    // Aplica cor de fundo ao container de resultados
+    resultContainer.style.backgroundColor = bgColor;
+    resultContainer.style.borderColor = color;
     resultContainer.style.display = "block";
     errorContainer.style.display = "none";
   }
