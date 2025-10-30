@@ -252,65 +252,90 @@ def facial_recognition_from_embedding(image_path, documento=None):
 
         cursor = conn.cursor()
         
-        # Se o documento foi fornecido, verifica apenas a pessoa específica
-        if documento:
-            cursor.execute('SELECT id, nome, email, telefone, embedding FROM pessoas WHERE ativo = true AND documento = %s AND embedding IS NOT NULL', (documento,))
-            pessoas = cursor.fetchall()
-            if not pessoas:
-                conn.close()
-                return {"success": False, "message": "Nenhuma pessoa encontrada com este número de documento."}
-        else:
-            cursor.execute('SELECT id, nome, email, telefone, embedding FROM pessoas WHERE ativo = true AND embedding IS NOT NULL')
-            pessoas = cursor.fetchall()
-             
+        if not documento:
+            return {"success": False, "message": "Número do documento é obrigatório para a verificação."}
+
+        # Busca a pessoa pelo documento
+        cursor.execute('SELECT id, nome, email, telefone, documento, embedding FROM pessoas WHERE ativo = true AND documento = %s', (documento,))
+        pessoa = cursor.fetchone()
         conn.close()
 
-        if not pessoas:
-            return {"success": False, "message": "Nenhuma pessoa com registro facial encontrada no sistema."}
+        if not pessoa:
+            return {"success": False, "message": "Nenhuma pessoa encontrada com este número de documento."}
 
-        print(f"🔍 Comparando com {len(pessoas)} pessoas no banco...")
-        best_match = None
-        best_confidence = 0.0
-
-        for pessoa_id, nome, email, telefone, db_embedding_data in pessoas:
-            if not db_embedding_data: continue
+        # Se a pessoa não tem embedding cadastrado
+        if not pessoa[5]:  # índice 5 é o embedding
+            return {
+                "success": True,
+                "person": {
+                    "id": int(pessoa[0]),
+                    "nome": str(pessoa[1]),
+                    "email": str(pessoa[2]) if pessoa[2] else None,
+                    "telefone": str(pessoa[3]) if pessoa[3] else None,
+                    "documento": str(pessoa[4])
+                },
+                "confidence": 0.0,
+                "warning": True,
+                "message": "Pessoa encontrada, mas não possui foto cadastrada para comparação."
+            }        print(f"🔍 Comparando com a pessoa de documento {documento}")
+        
+        try:
+            db_array = safe_pickle_loads(pessoa[5])  # pessoa[5] é o embedding
+            if db_array is None:
+                return {
+                    "success": True,
+                    "person": {
+                        "id": int(pessoa[0]),
+                        "nome": str(pessoa[1]),
+                        "email": str(pessoa[2]) if pessoa[2] else None,
+                        "telefone": str(pessoa[3]) if pessoa[3] else None,
+                        "documento": str(pessoa[4])
+                    },
+                    "confidence": 0.0,
+                    "warning": True,
+                    "message": "Erro ao processar a foto cadastrada desta pessoa."
+                }
             
-            try:
-                db_array = safe_pickle_loads(db_embedding_data)
-                if db_array is None:
-                    print(f"⚠️ Embedding corrompido para a pessoa {nome} (ID: {pessoa_id}), pulando.")
-                    continue
-                
-                similarity = cosine_similarity(input_array, db_array)
-                confidence = similarity * 100
+            similarity = cosine_similarity(input_array, db_array)
+            confidence = similarity * 100
 
-                print(f"   👤 Comparando com {nome}: {confidence:.2f}% de similaridade")
-
-                if confidence > best_confidence:
-                    best_confidence = confidence
-                    best_match = {'id': pessoa_id, 'nome': nome, 'email': email, 'telefone': telefone}
+            print(f"👤 Comparando com {pessoa[1]}: {confidence:.2f}% de similaridade")
             
-            except Exception as e:
-                print(f"⚠️ Erro ao comparar com {nome}: {e}")
-
-        if best_match:
-            is_low_confidence = float(best_confidence) < 60
+            is_low_confidence = float(confidence) < 60
             status_message = "⚠️ AVISO: Baixa similaridade" if is_low_confidence else "✅ Alta similaridade"
-            print(f"{status_message}: {best_match['nome']} com {best_confidence:.2f}% de confiança")
+            print(f"{status_message}: {pessoa[1]} com {confidence:.2f}% de confiança")
             
-            # Garantindo que todos os valores são tipos Python nativos
+            # Retorna o resultado sempre, independente da similaridade
             result = {
                 "success": True,
                 "person": {
-                    "id": int(best_match['id']),
-                    "nome": str(best_match['nome']),
-                    "email": str(best_match['email']) if best_match['email'] else None,
-                    "telefone": str(best_match['telefone']) if best_match['telefone'] else None
+                    "id": int(pessoa[0]),
+                    "nome": str(pessoa[1]),
+                    "email": str(pessoa[2]) if pessoa[2] else None,
+                    "telefone": str(pessoa[3]) if pessoa[3] else None,
+                    "documento": str(pessoa[4])
                 },
-                "confidence": float(best_confidence),
-                "warning": bool(is_low_confidence)
+                "confidence": float(confidence),
+                "warning": bool(is_low_confidence),
+                "message": "Baixa similaridade detectada" if is_low_confidence else "Alta similaridade detectada"
             }
             return result
+            
+        except Exception as e:
+            print(f"⚠️ Erro ao comparar faces: {e}")
+            return {
+                "success": True,
+                "person": {
+                    "id": int(pessoa[0]),
+                    "nome": str(pessoa[1]),
+                    "email": str(pessoa[2]) if pessoa[2] else None,
+                    "telefone": str(pessoa[3]) if pessoa[3] else None,
+                    "documento": str(pessoa[4])
+                },
+                "confidence": 0.0,
+                "warning": True,
+                "message": f"Erro ao comparar as fotos: {str(e)}"
+            }
         else:
             return {"success": False, "message": "Nenhuma pessoa encontrada para comparação."}
 
