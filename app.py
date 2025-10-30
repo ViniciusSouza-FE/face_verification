@@ -231,7 +231,7 @@ def emergency_fallback(reason=""):
     print(f"🚨 Acionando fallback de emergência. Razão: {reason}")
     return {
         "error": "O serviço de reconhecimento facial não está disponível no momento. Verifique os logs do servidor.",
-        "deepface_available": DEEPFACE_AVAILABLE
+        "deepface_available": bool(DEEPFACE_AVAILABLE)
     }
 
 def facial_recognition_from_embedding(image_path, documento=None):
@@ -294,14 +294,23 @@ def facial_recognition_from_embedding(image_path, documento=None):
                 print(f"⚠️ Erro ao comparar com {nome}: {e}")
 
         if best_match:
-            status_message = "⚠️ AVISO: Baixa similaridade" if best_confidence < 60 else "✅ Alta similaridade"
+            is_low_confidence = float(best_confidence) < 60
+            status_message = "⚠️ AVISO: Baixa similaridade" if is_low_confidence else "✅ Alta similaridade"
             print(f"{status_message}: {best_match['nome']} com {best_confidence:.2f}% de confiança")
-            return {
+            
+            # Garantindo que todos os valores são tipos Python nativos
+            result = {
                 "success": True,
-                "person": best_match,
+                "person": {
+                    "id": int(best_match['id']),
+                    "nome": str(best_match['nome']),
+                    "email": str(best_match['email']) if best_match['email'] else None,
+                    "telefone": str(best_match['telefone']) if best_match['telefone'] else None
+                },
                 "confidence": float(best_confidence),
-                "warning": best_confidence < 60
+                "warning": bool(is_low_confidence)
             }
+            return result
         else:
             return {"success": False, "message": "Nenhuma pessoa encontrada para comparação."}
 
