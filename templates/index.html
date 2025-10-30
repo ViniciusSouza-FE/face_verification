@@ -109,10 +109,15 @@
 
     <!-- Resultados -->
     <div class="result-container" id="resultContainer">
-      <h3><i class="fas fa-check-circle"></i> Identidade Confirmada!</h3>
+      <h3 id="resultTitle"></h3>
       <div id="resultMessage"></div>
       <div id="resultPerson" style="margin: 1rem 0"></div>
-      <p><strong>Confiança:</strong> <span id="resultConfidence"></span>%</p>
+      <div class="confidence-info">
+        <p><strong>Confiança:</strong> <span id="resultConfidence"></span>%</p>
+        <p id="similarityWarning" style="color: #ff6b6b; display: none; margin-top: 0.5rem;">
+          ⚠️ A similaridade está abaixo de 60%. Verifique cuidadosamente se a pessoa é realmente quem diz ser.
+        </p>
+      </div>
     </div>
 
     <div class="error-container" id="errorContainer">
@@ -245,37 +250,49 @@
     if (result.error) {
       showError(result.error);
     } else if (result.success) {
-      const resultDiv = document.getElementById("resultContainer");
-      const messageDiv = document.getElementById("resultMessage");
-      const personDiv = document.getElementById("resultPerson");
-      const confidenceSpan = document.getElementById("resultConfidence");
+      let message = result.warning 
+        ? "⚠️ ATENÇÃO: Baixa similaridade detectada!"
+        : "✅ Identidade confirmada com sucesso!";
       
-      resultDiv.style.display = "block";
-      document.getElementById("errorContainer").style.display = "none";
-      
-      // Atualiza o ícone e a cor baseado no match
-      const icon = result.match ? "check-circle" : "exclamation-triangle";
-      const headerColor = result.match ? "#28a745" : "#ffc107";
-      resultDiv.querySelector("h3").innerHTML = `<i class="fas fa-${icon}"></i> ${result.match ? "Verificação Concluída" : "Atenção!"}`;
-      resultDiv.querySelector("h3").style.color = headerColor;
-      
-      messageDiv.textContent = result.message;
-      
-      // Mostra informações da pessoa
-      personDiv.innerHTML = `
-        <p><strong>Nome:</strong> ${result.person.nome}</p>
-        <p><strong>Documento:</strong> ${result.person.documento}</p>
-        ${result.person.email ? `<p><strong>Email:</strong> ${result.person.email}</p>` : ''}
-        ${result.person.telefone ? `<p><strong>Telefone:</strong> ${result.person.telefone}</p>` : ''}
-      `;
-      
-      confidenceSpan.textContent = result.confidence.toFixed(1);
-      
-      // Adiciona classe de cor baseada no match
-      confidenceSpan.className = result.match ? "text-success" : "text-warning";
+      showResult(
+        message,
+        result.confidence,
+        result.person,
+        result.warning
+      );
     } else {
       showError(result.message || "Pessoa não identificada na base de dados");
     }
+  }
+
+  function showResult(message, confidence, person, isLowSimilarity) {
+    const resultContainer = document.getElementById("resultContainer");
+    const errorContainer = document.getElementById("errorContainer");
+    const resultTitle = document.getElementById("resultTitle");
+    const resultMessage = document.getElementById("resultMessage");
+    const resultPerson = document.getElementById("resultPerson");
+    const resultConfidence = document.getElementById("resultConfidence");
+    const similarityWarning = document.getElementById("similarityWarning");
+
+    // Define o ícone e a cor baseado na similaridade
+    const icon = isLowSimilarity ? "exclamation-triangle" : "check-circle";
+    const titleColor = isLowSimilarity ? "#ff6b6b" : "#28a745";
+
+    resultTitle.innerHTML = `<i class="fas fa-${icon}"></i> ${message}`;
+    resultTitle.style.color = titleColor;
+    
+    // Informações da pessoa
+    resultPerson.innerHTML = `
+      <p><strong>Nome:</strong> ${person.nome}</p>
+      ${person.email ? `<p><strong>Email:</strong> ${person.email}</p>` : ''}
+      ${person.telefone ? `<p><strong>Telefone:</strong> ${person.telefone}</p>` : ''}
+    `;
+    
+    resultConfidence.textContent = confidence.toFixed(2);
+    similarityWarning.style.display = isLowSimilarity ? "block" : "none";
+
+    resultContainer.style.display = "block";
+    errorContainer.style.display = "none";
   }
 
   // Event listener para mudança de arquivo
