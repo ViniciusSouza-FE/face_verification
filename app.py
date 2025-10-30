@@ -5,11 +5,16 @@ import numpy as np
 import json
 from datetime import datetime
 
-# CONFIGURAÇÃO CRÍTICA - usar versão compatível do numpy
+# CONFIGURAÇÃO CRÍTICA PARA RAILWAY
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '1'
 os.environ['OPENCV_LOG_LEVEL'] = 'ERROR'
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
+# Forçar uso de backend mais leve
+os.environ['DEEPFACE_BACKEND'] = 'opencv'
+os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+os.environ['TF_GPU_THREAD_MODE'] = 'gpu_private'
 
 print(f"🚀 Python version: {sys.version}")
 print(f"📦 NumPy version: {np.__version__}")
@@ -37,12 +42,16 @@ except ImportError as e:
     print(f"❌ Pillow não disponível: {e}")
     sys.exit(1)
 
+# Tentar importar OpenCV com fallback
 try:
     import cv2
     CV2_AVAILABLE = True
-    print("✅ OpenCV importado")
+    print("✅ OpenCV importado com sucesso")
 except ImportError as e:
     print(f"❌ OpenCV não disponível: {e}")
+    CV2_AVAILABLE = False
+except Exception as e:
+    print(f"⚠️ OpenCV com problemas: {e}")
     CV2_AVAILABLE = False
 
 try:
@@ -52,27 +61,40 @@ except ImportError as e:
     print(f"❌ psycopg2 não disponível: {e}")
     sys.exit(1)
 
-# DeepFace - carregamento condicional com timeout
+# DeepFace - carregamento condicional com fallback
 DEEPFACE_AVAILABLE = False
 DeepFace = None
 
 if CV2_AVAILABLE:
     try:
-        # Configurações para reduzir uso de memória
-        os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
-        os.environ['TF_GPU_THREAD_MODE'] = 'gpu_private'
-        
+        print("🔄 Tentando importar DeepFace...")
         from deepface import DeepFace
         DEEPFACE_AVAILABLE = True
-        print("✅ DeepFace importado")
+        print("✅ DeepFace importado com sucesso")
         
-        # Pré-configurar para usar backend mais leve
-        os.environ['DEEPFACE_BACKEND'] = 'opencv'
-        
+        # Teste básico do DeepFace
+        try:
+            # Teste simples para verificar se funciona
+            print("🔄 Testando DeepFace...")
+            # Usar uma imagem de teste local se disponível, senão pular
+            test_result = DeepFace.verify(
+                img1_path="https://raw.githubusercontent.com/serengil/deepface/master/tests/dataset/img1.jpg",
+                img2_path="https://raw.githubusercontent.com/serengil/deepface/master/tests/dataset/img2.jpg",
+                detector_backend="opencv",
+                enforce_detection=False,
+                silent=True
+            )
+            print("✅ DeepFace testado e funcionando")
+        except Exception as test_error:
+            print(f"⚠️ DeepFace com problemas no teste: {test_error}")
+            # Não desativar completamente, pode ser apenas problema de rede no teste
+            
     except ImportError as e:
         print(f"❌ DeepFace não disponível: {e}")
     except Exception as e:
         print(f"⚠️ DeepFace disponível mas com problemas: {e}")
+else:
+    print("❌ OpenCV não disponível - DeepFace não funcionará")
 
 import base64
 import io
@@ -215,7 +237,8 @@ def extract_embedding_optimized(image_path):
             detector_backend="opencv",
             enforce_detection=True,  # Só processa se detectar rosto
             align=True,
-            normalization="base"
+            normalization="base",
+            silent=True
         )
         
         if embedding_objs and len(embedding_objs) > 0:
@@ -650,7 +673,7 @@ def deletar_pessoa(pessoa_id):
 
 @app.route('/health')
 def health_check():
-    """Health check para Render"""
+    """Health check para Railway"""
     db_status = "connected" if get_db_connection() else "disconnected"
     
     return jsonify({
@@ -659,7 +682,8 @@ def health_check():
         "database": db_status,
         "deepface_available": DEEPFACE_AVAILABLE,
         "opencv_available": CV2_AVAILABLE,
-        "python_version": sys.version.split()[0]
+        "python_version": sys.version.split()[0],
+        "environment": "railway"
     })
 
 @app.route('/api/test')
@@ -685,7 +709,8 @@ def api_test():
         "database": db_status,
         "pessoas_cadastradas": pessoa_count,
         "deepface": DEEPFACE_AVAILABLE,
-        "opencv": CV2_AVAILABLE
+        "opencv": CV2_AVAILABLE,
+        "environment": "railway"
     })
 
 @app.route('/api/debug_embeddings')
@@ -784,5 +809,32 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     
-    print(f"📡 Iniciando servidor na porta {port}")
-    app.run(host='0.0.0.0', port=port, debug=debug)
+    if debug:
+        print(f"🔧 Modo debug ativado na porta {port}")
+        app.run(host='0.0.0.0', port=port, debug=debug)
+    else:
+        print(f"📡 Iniciando servidor Gunicorn na porta {port}")
+        from gunicorn.app.wsgiapp import WSGIApplication
+        import sys
+        
+        class StandaloneApplication(WSGIApplication):
+            def __init__(self, app, options=None):
+                self.application = app
+                self.options = options or {}
+                super().__init__()
+            
+            def load_config(self):
+                for key, value in self.options.items():
+                    self.cfg.set(key, value)
+            
+            def load(self):
+                return self.application
+        
+        options = {
+            'bind': f'0.0.0.0:{port}',
+            'workers': 1,
+            'threads': 2,
+            'timeout': 120,
+        }
+        
+        StandaloneApplication(app, options).run()
