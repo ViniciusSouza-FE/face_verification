@@ -16,6 +16,18 @@
         <p>Selecione uma foto dos seus arquivos para identificar a pessoa</p>
 
         <div class="form-group">
+          <label class="form-label" for="documentoUpload">
+            <i class="fas fa-id-card"></i> Número do Documento *
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="documentoUpload"
+            required
+          />
+        </div>
+
+        <div class="form-group">
           <div
             class="file-input"
             onclick="document.getElementById('fileInput').click()"
@@ -52,6 +64,18 @@
         </div>
         <h2>Usar Câmera</h2>
         <p>Capture uma foto usando a câmera do seu dispositivo</p>
+
+        <div class="form-group">
+          <label class="form-label" for="documentoCamera">
+            <i class="fas fa-id-card"></i> Número do Documento *
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="documentoCamera"
+            required
+          />
+        </div>
 
         <button class="btn btn-primary" onclick="startCamera()">
           <i class="fas fa-camera"></i> Abrir Câmera
@@ -148,6 +172,13 @@
 
   // Processar imagem da câmera
   async function processCameraImage(imageData) {
+    const documento = document.getElementById('documentoCamera').value.trim();
+    
+    if (!documento) {
+      showError("Por favor, informe o número do documento");
+      return;
+    }
+
     showLoading(cameraLoading);
     hideResults();
 
@@ -157,7 +188,10 @@
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ image: imageData }),
+        body: JSON.stringify({ 
+          image: imageData,
+          documento: documento 
+        }),
       });
 
       const result = await response.json();
@@ -173,6 +207,12 @@
   // Processar upload de arquivo
   async function processUpload() {
     const file = fileInput.files[0];
+    const documento = document.getElementById('documentoUpload').value.trim();
+
+    if (!documento) {
+      showError("Por favor, informe o número do documento");
+      return;
+    }
     if (!file) {
       showError("Por favor, selecione uma imagem");
       return;
@@ -183,6 +223,7 @@
 
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("documento", documento);
 
     try {
       const response = await fetch("/api/recognize_upload", {

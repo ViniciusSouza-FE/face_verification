@@ -123,8 +123,9 @@ def init_database():
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS pessoas (
                     id SERIAL PRIMARY KEY, nome VARCHAR(255) NOT NULL, email VARCHAR(255),
-                    telefone VARCHAR(50), embedding BYTEA,
-                    data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP, ativo BOOLEAN DEFAULT true
+                    telefone VARCHAR(50), documento VARCHAR(20) NOT NULL UNIQUE,
+                    embedding BYTEA, data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    ativo BOOLEAN DEFAULT true
                 )
             """)
             cursor.execute("""
@@ -196,7 +197,7 @@ def emergency_fallback(reason=""):
         "deepface_available": DEEPFACE_AVAILABLE
     }
 
-def facial_recognition_from_embedding(image_path):
+def facial_recognition_from_embedding(image_path, documento=None):
     if not DEEPFACE_AVAILABLE:
         return emergency_fallback("DeepFace não foi inicializado.")
 
@@ -213,8 +214,18 @@ def facial_recognition_from_embedding(image_path):
         if not conn: return {"error": "Erro de conexão com o banco de dados."}
 
         cursor = conn.cursor()
-        cursor.execute('SELECT id, nome, email, telefone, embedding FROM pessoas WHERE ativo = true AND embedding IS NOT NULL')
-        pessoas = cursor.fetchall()
+        
+        # Se o documento foi fornecido, verifica apenas a pessoa específica
+        if documento:
+            cursor.execute('SELECT id, nome, email, telefone, embedding FROM pessoas WHERE ativo = true AND documento = %s AND embedding IS NOT NULL', (documento,))
+            pessoas = cursor.fetchall()
+            if not pessoas:
+                conn.close()
+                return {"success": False, "message": "Nenhuma pessoa encontrada com este número de documento."}
+        else:
+            cursor.execute('SELECT id, nome, email, telefone, embedding FROM pessoas WHERE ativo = true AND embedding IS NOT NULL')
+            pessoas = cursor.fetchall()
+            
         conn.close()
 
         if not pessoas:
@@ -332,11 +343,21 @@ def api_estatisticas():
 def cadastrar_pessoa():
     try:
         nome = request.form.get('nome', '').strip()
+        documento = request.form.get('documento', '').strip()
         if not nome: return jsonify({"error": "Nome é obrigatório"})
+        if not documento: return jsonify({"error": "Número do documento é obrigatório"})
         if 'foto' not in request.files: return jsonify({"error": "Foto é obrigatória"})
         file = request.files['foto']
         if not file or not allowed_file(file.filename):
             return jsonify({"error": "Arquivo inválido ou não selecionado."})
+
+        # Verifica se já existe pessoa com o mesmo documento
+        conn = get_db_connection()
+        if not conn: return jsonify({"error": "Erro de conexão com o banco"})
+        cursor = conn.cursor()
+        cursor.execute('SELECT id FROM pessoas WHERE documento = %s AND ativo = true', (documento,))
+        if cursor.fetchone():
+            return jsonify({"error": "Já existe uma pessoa cadastrada com este número de documento."})
 
         image = Image.open(file.stream)
         image.thumbnail((400, 400), Image.Resampling.LANCZOS)
@@ -350,14 +371,10 @@ def cadastrar_pessoa():
 
         if embedding is None:
             return jsonify({"error": "Não foi possível detectar um rosto na foto. Tente uma imagem mais nítida."})
-
-        conn = get_db_connection()
-        if not conn: return jsonify({"error": "Erro de conexão com o banco"})
         
-        cursor = conn.cursor()
         cursor.execute(
-            'INSERT INTO pessoas (nome, email, telefone, embedding) VALUES (%s, %s, %s, %s) RETURNING id',
-            (nome, request.form.get('email', ''), request.form.get('telefone', ''), embedding)
+            'INSERT INTO pessoas (nome, email, telefone, documento, embedding) VALUES (%s, %s, %s, %s, %s) RETURNING id',
+            (nome, request.form.get('email', ''), request.form.get('telefone', ''), documento, embedding)
         )
         pessoa_id = cursor.fetchone()[0]
         conn.commit()
@@ -375,6 +392,10 @@ def recognize_upload():
         if 'file' not in request.files: return jsonify({"error": "Nenhum arquivo enviado"})
         file = request.files['file']
         if not file or not allowed_file(file.filename): return jsonify({"error": "Arquivo inválido ou não selecionado"})
+        
+        documento = request.form.get('documento', '').strip()
+        if not documento:
+            return jsonify({"error": "Número do documento é obrigatório"})
 
         image = Image.open(file.stream)
         image.thumbnail((400, 400), Image.Resampling.LANCZOS)
@@ -383,7 +404,7 @@ def recognize_upload():
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         image.save(filepath, 'JPEG', quality=85)
 
-        result = facial_recognition_from_embedding(filepath)
+        result = facial_recognition_from_embedding(filepath, documento)
         os.remove(filepath)
         
         if result.get('success'):
@@ -400,6 +421,7 @@ def recognize_camera():
     try:
         data = request.get_json()
         if not data or 'image' not in data: return jsonify({"error": "Nenhuma imagem recebida"})
+        if 'documento' not in data: return jsonify({"error": "Número do documento é obrigatório"})
 
         image = base64_to_image(data['image'])
         image.thumbnail((400, 400), Image.Resampling.LANCZOS)
@@ -408,7 +430,7 @@ def recognize_camera():
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         image.save(filepath, 'JPEG', quality=85)
 
-        result = facial_recognition_from_embedding(filepath)
+        result = facial_recognition_from_embedding(filepath, data['documento'])
         os.remove(filepath)
         
         if result.get('success'):
