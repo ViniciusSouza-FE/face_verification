@@ -1,6 +1,6 @@
-FROM python:3.11-slim-bullseye
+FROM python:3.11-bullseye
 
-# Instalar dependências do sistema para OpenCV
+# Instalar dependências do sistema
 RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     libsm6 \
@@ -17,7 +17,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar o resto da aplicação
 COPY . .
-
 # Criar diretório de uploads
 RUN mkdir -p static/uploads
 
@@ -28,5 +27,5 @@ ENV PYTHONUNBUFFERED=1
 # Expor porta
 EXPOSE 8080
 
-# Comando de inicialização otimizado para Railway
-CMD gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120 app:app
+# Comando de inicialização
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--threads", "4", "--timeout", "120", "app:app"]
