@@ -120,6 +120,7 @@ def get_db_connection():
         return None
 
 def init_database():
+    conn = None
     try:
         print("🔄 Iniciando inicialização do banco de dados...")
         conn = get_db_connection()
@@ -163,21 +164,8 @@ def init_database():
         
     except Exception as e:
         print(f"❌ Erro ao inicializar banco de dados: {str(e)}")
-        if 'conn' in locals() and conn:
+        if conn:
             conn.close()
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS registros_reconhecimento (
-                    id SERIAL PRIMARY KEY, pessoa_id INTEGER REFERENCES pessoas(id),
-                    metodo VARCHAR(50), confianca DECIMAL(5,2),
-                    data_reconhecimento TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            conn.commit()
-            cursor.close()
-            conn.close()
-            print("✅ Banco de dados inicializdo com sucesso!")
-    except Exception as e:
-        print(f"⚠️ Aviso ao inicializar banco: {e}")
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -277,7 +265,9 @@ def facial_recognition_from_embedding(image_path, documento=None):
                 "confidence": 0.0,
                 "warning": True,
                 "message": "Pessoa encontrada, mas não possui foto cadastrada para comparação."
-            }        print(f"🔍 Comparando com a pessoa de documento {documento}")
+            }
+
+        print(f"🔍 Comparando com a pessoa de documento {documento}")
         
         try:
             db_array = safe_pickle_loads(pessoa[5])  # pessoa[5] é o embedding
@@ -336,8 +326,6 @@ def facial_recognition_from_embedding(image_path, documento=None):
                 "warning": True,
                 "message": f"Erro ao comparar as fotos: {str(e)}"
             }
-        else:
-            return {"success": False, "message": "Nenhuma pessoa encontrada para comparação."}
 
     except Exception as e:
         print(f"❌ Erro inesperado durante o reconhecimento facial: {e}")
