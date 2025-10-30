@@ -248,13 +248,45 @@ def facial_recognition_from_embedding(image_path, documento=None):
 
         cursor = conn.cursor()
         
-        # Se o documento foi fornecido, verifica apenas a pessoa específica
+        # Se o documento foi fornecido, busca a pessoa específica
         if documento:
-            cursor.execute('SELECT id, nome, email, telefone, embedding FROM pessoas WHERE ativo = true AND documento = %s AND embedding IS NOT NULL', (documento,))
-            pessoas = cursor.fetchall()
-            if not pessoas:
+            cursor.execute('SELECT id, nome, email, telefone, documento, embedding FROM pessoas WHERE ativo = true AND documento = %s AND embedding IS NOT NULL', (documento,))
+            pessoa = cursor.fetchone()
+            if not pessoa:
                 conn.close()
                 return {"success": False, "message": "Nenhuma pessoa encontrada com este número de documento."}
+            
+            # Compara com a pessoa do documento
+            db_embedding_data = pessoa[5]  # índice 5 é o embedding
+            if not db_embedding_data:
+                conn.close()
+                return {"success": False, "message": "Erro ao recuperar dados biométricos da pessoa."}
+            
+            db_array = safe_pickle_loads(db_embedding_data)
+            if db_array is None:
+                conn.close()
+                return {"success": False, "message": "Erro ao processar dados biométricos da pessoa."}
+            
+            similarity = cosine_similarity(input_array, db_array)
+            confidence = similarity * 100
+            
+            pessoa_info = {
+                'id': pessoa[0],
+                'nome': pessoa[1],
+                'email': pessoa[2],
+                'telefone': pessoa[3],
+                'documento': pessoa[4]
+            }
+            
+            # Sempre retorna o resultado da comparação
+            return {
+                "success": True,
+                "person": pessoa_info,
+                "confidence": float(confidence),
+                "match": confidence > 60.0,  # Define se houve match baseado no threshold
+                "message": "Comparação realizada com sucesso!"
+            }
+            
         else:
             cursor.execute('SELECT id, nome, email, telefone, embedding FROM pessoas WHERE ativo = true AND embedding IS NOT NULL')
             pessoas = cursor.fetchall()
@@ -443,6 +475,12 @@ def recognize_upload():
         if result.get('success'):
             save_recognition_log(result['person']['id'], 'upload', result['confidence'])
             
+            # Adiciona mensagem mais clara sobre o resultado
+            if result.get('match'):
+                result['message'] = f"Verificação concluída! A pessoa foi identificada como {result['person']['nome']} com {result['confidence']:.1f}% de confiança."
+            else:
+                result['message'] = f"Atenção! A foto não corresponde à pessoa cadastrada com este documento. Confiança: {result['confidence']:.1f}%"
+            
         return jsonify(result)
 
     except Exception as e:
@@ -468,6 +506,12 @@ def recognize_camera():
         
         if result.get('success'):
             save_recognition_log(result['person']['id'], 'camera', result['confidence'])
+
+            # Adiciona mensagem mais clara sobre o resultado
+            if result.get('match'):
+                result['message'] = f"Verificação concluída! A pessoa foi identificada como {result['person']['nome']} com {result['confidence']:.1f}% de confiança."
+            else:
+                result['message'] = f"Atenção! A foto não corresponde à pessoa cadastrada com este documento. Confiança: {result['confidence']:.1f}%"
 
         return jsonify(result)
 

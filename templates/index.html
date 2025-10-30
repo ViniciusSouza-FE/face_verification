@@ -245,11 +245,34 @@
     if (result.error) {
       showError(result.error);
     } else if (result.success) {
-      showResult(
-        "Identidade confirmada com sucesso!",
-        result.confidence,
-        result.person
-      );
+      const resultDiv = document.getElementById("resultContainer");
+      const messageDiv = document.getElementById("resultMessage");
+      const personDiv = document.getElementById("resultPerson");
+      const confidenceSpan = document.getElementById("resultConfidence");
+      
+      resultDiv.style.display = "block";
+      document.getElementById("errorContainer").style.display = "none";
+      
+      // Atualiza o ícone e a cor baseado no match
+      const icon = result.match ? "check-circle" : "exclamation-triangle";
+      const headerColor = result.match ? "#28a745" : "#ffc107";
+      resultDiv.querySelector("h3").innerHTML = `<i class="fas fa-${icon}"></i> ${result.match ? "Verificação Concluída" : "Atenção!"}`;
+      resultDiv.querySelector("h3").style.color = headerColor;
+      
+      messageDiv.textContent = result.message;
+      
+      // Mostra informações da pessoa
+      personDiv.innerHTML = `
+        <p><strong>Nome:</strong> ${result.person.nome}</p>
+        <p><strong>Documento:</strong> ${result.person.documento}</p>
+        ${result.person.email ? `<p><strong>Email:</strong> ${result.person.email}</p>` : ''}
+        ${result.person.telefone ? `<p><strong>Telefone:</strong> ${result.person.telefone}</p>` : ''}
+      `;
+      
+      confidenceSpan.textContent = result.confidence.toFixed(1);
+      
+      // Adiciona classe de cor baseada no match
+      confidenceSpan.className = result.match ? "text-success" : "text-warning";
     } else {
       showError(result.message || "Pessoa não identificada na base de dados");
     }
