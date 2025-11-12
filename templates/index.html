@@ -80,6 +80,8 @@
         <button class="btn btn-primary" onclick="startCamera()">
           <i class="fas fa-camera"></i> Abrir Câmera
         </button>
+        <!-- Mobile-friendly camera input: opens native camera overlay on mobile devices -->
+        <input type="file" id="mobileCameraInput" accept="image/*" capture="environment" style="display:none" />
 
         <div class="camera-container" id="cameraContainer">
           <video id="video" autoplay playsinline></video>
@@ -175,6 +177,14 @@
 
   // Iniciar câmera
   async function startCamera() {
+    // Em dispositivos mobile, use o input file com capture para abrir a câmera nativa (overlay)
+    if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      const mobileInput = document.getElementById('mobileCameraInput');
+      mobileInput.value = null;
+      mobileInput.click();
+      return;
+    }
+
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -348,5 +358,22 @@
     }
     hideResults();
   });
+
+  // Mobile camera input (native overlay) -> reuse same upload flow
+  const mobileCameraInput = document.getElementById('mobileCameraInput');
+  if (mobileCameraInput) {
+    mobileCameraInput.addEventListener('change', function() {
+      if (this.files && this.files[0]) {
+        // copy file into the hidden fileInput to reuse processUpload()
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(this.files[0]);
+        fileInput.files = dataTransfer.files;
+        document.querySelector('.file-input p').textContent = `Foto capturada: ${this.files[0].name}`;
+        hideResults();
+        // Preenche o campo de documento se o usuário deixou em branco? mantemos como está
+        processUpload();
+      }
+    });
+  }
 </script>
 {% endblock %}

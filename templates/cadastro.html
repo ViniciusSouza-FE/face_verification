@@ -98,6 +98,8 @@
                 style="display: none"
                 required
               />
+              <!-- Mobile native camera trigger for better UX on phones -->
+              <input type="file" id="mobileFotoInput" accept="image/*" capture="environment" style="display:none" />
             </div>
 
             <!-- Área da Câmera -->
@@ -198,6 +200,32 @@
       imagePreview.style.display = "none";
     }
   });
+
+  // Handler para input de câmera nativa em mobile
+  const mobileFotoInput = document.getElementById('mobileFotoInput');
+  if (mobileFotoInput) {
+    mobileFotoInput.addEventListener('change', function() {
+      if (this.files && this.files[0]) {
+        // coloca o arquivo no input principal
+        const dt = new DataTransfer();
+        dt.items.add(this.files[0]);
+        fotoInput.files = dt.files;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          preview.src = e.target.result;
+          imagePreview.style.display = 'block';
+        }
+        reader.readAsDataURL(this.files[0]);
+
+        // atualiza label
+        fileLabel.textContent = this.files[0].name;
+        // garante que a área de upload está visível
+        document.getElementById('fileUploadArea').style.display = 'block';
+        document.getElementById('cameraArea').style.display = 'none';
+      }
+    });
+  }
 
   // Submissão do formulário
   form.addEventListener("submit", async function (e) {
@@ -310,6 +338,13 @@
       btnCamera.classList.remove('btn-primary');
       pararCamera();
     } else {
+      // Em mobile, abrir a câmera nativa em vez de iniciar getUserMedia
+      if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        const mobile = document.getElementById('mobileFotoInput');
+        if (mobile) { mobile.value = null; mobile.click(); }
+        return;
+      }
+
       fileArea.style.display = 'none';
       cameraArea.style.display = 'block';
       btnCamera.classList.add('btn-primary');
