@@ -83,7 +83,6 @@
           <button class="btn btn-primary" onclick="startCamera()">
             <i class="fas fa-camera"></i> Abrir Câmera
           </button>
-          <!-- Mobile-friendly camera input: opens native camera overlay on mobile devices -->
           <input
             type="file"
             id="mobileCameraInput"
@@ -146,77 +145,13 @@
       <div id="resultMessage"></div>
       <div id="resultPerson" style="margin: 1rem 0"></div>
       <div class="confidence-info">
-        <p>
-          <strong>Confiança:</strong>
-          <span id="resultConfidence"></span>
-          <span
-            class="confidence-indicator"
-            style="margin-left: 10px; font-size: 0.9em"
-          >
-            (Alta: ≥80% | Média: 60-79% | Baixa: <60%)
-          </span>
+        <div id="resultConfidence"></div>
+        <p class="confidence-indicator" style="margin-top: 0.5rem">
+          (Alta: ≥80% | Média: 60-79% | Baixa: <60%)
         </p>
-        <p
-          id="similarityWarning"
-          style="margin-top: 0.5rem; font-weight: bold"
-        ></p>
+        <div id="similarityWarning" style="margin-top: 1rem"></div>
       </div>
     </div>
-
-    <style>
-      .confidence-indicator {
-        color: #666;
-        font-style: italic;
-      }
-
-      #video,
-      #cameraPreviewImg {
-        width: 100%;
-        max-width: 100%;
-        border-radius: 10px;
-        display: block;
-        margin: 0 auto;
-        height: auto;
-        max-height: 50vh;
-      }
-
-      .result-container {
-        transition: all 0.3s ease-in-out;
-        border: 1px solid;
-        border-radius: 8px;
-        padding: 1.25rem;
-      }
-
-      @media (max-width: 768px) {
-        .method-card {
-          margin-bottom: 1rem;
-        }
-
-        .mobile-stack {
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-        }
-
-        .btn {
-          margin-bottom: 0.5rem;
-        }
-      }
-
-      @media (max-width: 480px) {
-        .card-body {
-          padding: 0.75rem;
-        }
-
-        .method-card {
-          padding: 1rem;
-        }
-
-        .file-input {
-          padding: 1rem;
-        }
-      }
-    </style>
 
     <div class="error-container" id="errorContainer">
       <h3><i class="fas fa-exclamation-circle"></i> Erro</h3>
@@ -224,6 +159,88 @@
     </div>
   </div>
 </div>
+
+<style>
+  .confidence-indicator {
+    color: #666;
+    font-style: italic;
+    font-size: 0.9em;
+  }
+
+  .high-confidence {
+    color: #28a745;
+    font-weight: bold;
+  }
+
+  .medium-confidence {
+    color: #ff9800;
+    font-weight: bold;
+  }
+
+  .low-confidence {
+    color: #dc3545;
+    font-weight: bold;
+  }
+
+  #video,
+  #cameraPreviewImg {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 10px;
+    display: block;
+    margin: 0 auto;
+    height: auto;
+    max-height: 50vh;
+  }
+
+  .result-container {
+    transition: all 0.3s ease-in-out;
+    border: 1px solid;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  @media (max-width: 768px) {
+    .method-card {
+      margin-bottom: 1rem;
+    }
+
+    .mobile-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .btn {
+      margin-bottom: 0.5rem;
+    }
+
+    .result-container {
+      padding: 1.25rem;
+      margin: 1rem 0;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .card-body {
+      padding: 0.75rem;
+    }
+
+    .method-card {
+      padding: 1rem;
+    }
+
+    .file-input {
+      padding: 1rem;
+    }
+
+    .result-container {
+      padding: 1rem;
+    }
+  }
+</style>
 
 <script>
   let stream = null;
@@ -237,7 +254,6 @@
 
   // Iniciar câmera
   async function startCamera() {
-    // Em dispositivos mobile, use o input file com capture para abrir a câmera nativa (overlay)
     if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
       const mobileInput = document.getElementById("mobileCameraInput");
       mobileInput.value = null;
@@ -269,7 +285,7 @@
     cameraContainer.style.display = "none";
   }
 
-  // Capturar foto da câmera (mostra preview e exige confirmação antes de enviar)
+  // Capturar foto da câmera
   let lastCapturedDataUrl = null;
   function capturePhoto() {
     const canvas = document.createElement("canvas");
@@ -281,12 +297,10 @@
     const imageData = canvas.toDataURL("image/jpeg");
     lastCapturedDataUrl = imageData;
 
-    // Mostrar preview
     const previewImg = document.getElementById("cameraPreviewImg");
     previewImg.src = imageData;
     previewImg.style.display = "block";
 
-    // Mostrar botão de confirmar
     document.getElementById("cameraConfirmBtn").style.display = "inline-flex";
   }
 
@@ -302,7 +316,6 @@
       return;
     }
 
-    // Se já existe um arquivo no fileInput (por exemplo camera nativa mobile), usamos direto
     if (fileInput && fileInput.files && fileInput.files[0]) {
       showLoading(cameraLoading);
       hideResults();
@@ -329,7 +342,6 @@
     hideResults();
 
     try {
-      // Converter dataURL para blob/file e usar o mesmo endpoint de upload para consistência
       const res = await fetch(lastCapturedDataUrl);
       const blob = await res.blob();
       const file = new File([blob], "camera.jpg", { type: blob.type });
@@ -338,14 +350,12 @@
       dataTransfer.items.add(file);
       fileInput.files = dataTransfer.files;
 
-      // chamamos processUpload que detecta ambos campos de documento
       await processUpload();
     } catch (error) {
       showError("Erro ao enviar a foto: " + error.message);
     } finally {
       hideLoading(cameraLoading);
       stopCamera();
-      // reset preview and lastCaptured
       lastCapturedDataUrl = null;
       const previewImg = document.getElementById("cameraPreviewImg");
       if (previewImg) previewImg.style.display = "none";
@@ -353,10 +363,9 @@
     }
   }
 
-  // Processar upload de arquivo (usado tanto para upload tradicional quanto para confirmações de câmera)
+  // Processar upload de arquivo
   async function processUpload() {
     const file = fileInput.files[0];
-    // tenta obter documento dos dois campos (upload ou camera)
     const documento = (
       document.getElementById("documentoUpload").value ||
       document.getElementById("documentoCamera").value ||
@@ -405,15 +414,15 @@
       if (confidence >= 80) {
         message = "Alta similaridade detectada!";
         color = "#28a745"; // Verde
-        bgColor = "#d4edda";
+        bgColor = "#e8f5e8"; // Verde mais claro
       } else if (confidence >= 60) {
         message = "Similaridade média detectada!";
-        color = "#856404"; // Amarelo
-        bgColor = "#fff3cd";
+        color = "#ff9800"; // Laranja/Amarelo
+        bgColor = "#fff8e1"; // Amarelo claro
       } else {
         message = "Baixa similaridade detectada!";
         color = "#dc3545"; // Vermelho
-        bgColor = "#f8d7da";
+        bgColor = "#fde8e8"; // Vermelho claro
       }
 
       showResult(
@@ -445,61 +454,101 @@
     const resultConfidence = document.getElementById("resultConfidence");
     const similarityWarning = document.getElementById("similarityWarning");
 
-    resultTitle.textContent = message;
-    resultTitle.style.color = color;
+    // Limpa mensagens anteriores
+    resultMessage.textContent = "";
 
     // Informações da pessoa
     resultPerson.innerHTML = `
-      <p><strong>Nome:</strong> ${person.nome}</p>
-      ${person.email ? `<p><strong>Email:</strong> ${person.email}</p>` : ""}
-      ${
-        person.telefone
-          ? `<p><strong>Telefone:</strong> ${person.telefone}</p>`
-          : ""
-      }
+        <div style="margin-bottom: 1rem;">
+            <p><strong>Nome:</strong> ${person.nome}</p>
+            ${
+              person.email
+                ? `<p><strong>Email:</strong> ${person.email}</p>`
+                : ""
+            }
+            ${
+              person.telefone
+                ? `<p><strong>Telefone:</strong> ${person.telefone}</p>`
+                : ""
+            }
+        </div>
     `;
 
     // Formata a confiança para 1 casa decimal
-    const confidenceFormatted = confidence.toFixed(1);
+    const confidenceFormatted = parseFloat(confidence).toFixed(1);
 
-    // Define o ícone e a cor de acordo com a confiança
+    // Define o ícone, cor e estilo de acordo com a confiança
     let icon = "";
     let confidenceColor = "";
+    let confidenceClass = "";
+
     if (confidence >= 80) {
       icon = "✓";
-      confidenceColor = "#28a745"; // Verde mais vibrante
+      confidenceColor = "#28a745"; // Verde
+      confidenceClass = "high-confidence";
+      resultTitle.innerHTML =
+        '<i class="fas fa-check-circle"></i> Alta Similaridade Detectada!';
     } else if (confidence >= 60) {
       icon = "⚠";
-      confidenceColor = "#ffc107"; // Amarelo
+      confidenceColor = "#ff9800"; // Laranja/Amarelo mais vibrante
+      confidenceClass = "medium-confidence";
+      resultTitle.innerHTML =
+        '<i class="fas fa-exclamation-triangle"></i> Similaridade Média Detectada!';
     } else {
       icon = "✗";
       confidenceColor = "#dc3545"; // Vermelho
+      confidenceClass = "low-confidence";
+      resultTitle.innerHTML =
+        '<i class="fas fa-times-circle"></i> Baixa Similaridade Detectada!';
     }
 
+    // Aplica as cores ao título
+    resultTitle.style.color = confidenceColor;
+
+    // Atualiza a exibição da confiança com ícone
     resultConfidence.innerHTML = `
-        <span style="color: ${confidenceColor}; font-weight: bold; font-size: 1.1em;">
-            ${confidenceFormatted}% 
-            <span style="margin-left: 8px; font-size: 1.2em;">${icon}</span>
-        </span>
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin: 1rem 0;">
+            <span style="font-size: 1.1rem; font-weight: 600;">Confiança:</span>
+            <span style="color: ${confidenceColor}; font-weight: bold; font-size: 1.3em; background: ${confidenceColor}15; padding: 0.5rem 1rem; border-radius: 8px; border-left: 4px solid ${confidenceColor};">
+                ${confidenceFormatted}% 
+                <span style="margin-left: 8px; font-size: 1.2em;">${icon}</span>
+            </span>
+        </div>
     `;
 
-    similarityWarning.style.display = isLowSimilarity ? "block" : "none";
-    similarityWarning.textContent = isLowSimilarity
-      ? "⚠️ Atenção: Similaridade abaixo do ideal. Recomenda-se verificação adicional."
-      : "";
+    // Mensagem de warning para baixa similaridade
+    if (isLowSimilarity) {
+      similarityWarning.style.display = "block";
+      similarityWarning.innerHTML = `
+            <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 6px; padding: 0.75rem; margin-top: 1rem;">
+                <i class="fas fa-exclamation-triangle" style="color: #856404;"></i>
+                <strong style="color: #856404; margin-left: 0.5rem;">Atenção:</strong> 
+                <span style="color: #856404; margin-left: 0.25rem;">Similaridade abaixo do ideal. Recomenda-se verificação adicional.</span>
+            </div>
+        `;
+    } else {
+      similarityWarning.style.display = "none";
+    }
 
-    // Aplica cor de fundo ao container de resultados
+    // Aplica cor de fundo e borda ao container de resultados
     resultContainer.style.backgroundColor = bgColor;
     resultContainer.style.borderColor = color;
+    resultContainer.style.borderLeft = `5px solid ${color}`;
     resultContainer.style.display = "block";
+
+    // Esconde container de erro
     errorContainer.style.display = "none";
+
+    // Scroll suave para o resultado
+    setTimeout(() => {
+      resultContainer.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 100);
   }
 
   // Event listener para mudança de arquivo
   fileInput.addEventListener("change", function () {
     if (this.files[0]) {
       const fileName = this.files[0].name;
-      // truncate long file names for display
       const truncated =
         fileName.length > 40
           ? fileName.slice(0, 20) + "..." + fileName.slice(-15)
@@ -511,17 +560,15 @@
     hideResults();
   });
 
-  // Mobile camera input (native overlay) -> show preview and require confirmation before sending
+  // Mobile camera input
   const mobileCameraInput = document.getElementById("mobileCameraInput");
   if (mobileCameraInput) {
     mobileCameraInput.addEventListener("change", function () {
       if (this.files && this.files[0]) {
-        // coloca no fileInput para reuso
         const dataTransfer = new DataTransfer();
         dataTransfer.items.add(this.files[0]);
         fileInput.files = dataTransfer.files;
 
-        // mostrar preview da imagem e botão de confirmar
         const reader = new FileReader();
         reader.onload = function (e) {
           const previewImg = document.getElementById("cameraPreviewImg");
@@ -529,10 +576,8 @@
           previewImg.style.display = "block";
           document.getElementById("cameraConfirmBtn").style.display =
             "inline-flex";
-          // Garantir que o container da câmera esteja visível em mobile
           const camContainer = document.getElementById("cameraContainer");
           if (camContainer) camContainer.style.display = "block";
-          // Rolar para o preview em telas pequenas
           try {
             previewImg.scrollIntoView({ behavior: "smooth", block: "center" });
           } catch (e) {}
@@ -552,7 +597,7 @@
     });
   }
 
-  // Funções utilitárias globais (caso não estejam no base.html)
+  // Funções utilitárias
   function showLoading(loadingElement) {
     if (loadingElement) loadingElement.style.display = "block";
   }
