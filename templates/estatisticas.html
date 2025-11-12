@@ -1,0 +1,210 @@
+{% extends "base.html" %} {% block content %}
+<div class="card">
+  <div class="card-header">
+    <h1><i class="fas fa-chart-bar"></i> Estatísticas do Sistema</h1>
+    <p>Relatórios e métricas do sistema de confirmação facial</p>
+  </div>
+
+  <div class="card-body">
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p>Carregando estatísticas...</p>
+    </div>
+
+    <div id="estatisticasContent" style="display: none">
+      <!-- Cards de Resumo -->
+      <div class="grid grid-4">
+        <div class="stats-card">
+          <div class="stats-icon">
+            <i class="fas fa-users" style="font-size: 2rem; color: #4361ee"></i>
+          </div>
+          <div class="stats-number" id="totalPessoas">0</div>
+          <div class="stats-label">Pessoas Cadastradas</div>
+        </div>
+
+        <div class="stats-card">
+          <div class="stats-icon">
+            <i
+              class="fas fa-search"
+              style="font-size: 2rem; color: #7209b7"
+            ></i>
+          </div>
+          <div class="stats-number" id="totalReconhecimentos">0</div>
+          <div class="stats-label">Total de Confirmações</div>
+        </div>
+
+        <div class="stats-card">
+          <div class="stats-icon">
+            <i
+              class="fas fa-camera"
+              style="font-size: 2rem; color: #4cc9f0"
+            ></i>
+          </div>
+          <div class="stats-number" id="reconhecimentosCamera">0</div>
+          <div class="stats-label">Por Câmera</div>
+        </div>
+
+        <div class="stats-card">
+          <div class="stats-icon">
+            <i
+              class="fas fa-upload"
+              style="font-size: 2rem; color: #f8961e"
+            ></i>
+          </div>
+          <div class="stats-number" id="reconhecimentosUpload">0</div>
+          <div class="stats-label">Por Upload</div>
+        </div>
+      </div>
+
+      <!-- Gráficos -->
+      <div class="grid grid-2" style="margin-top: 2rem">
+        <div class="chart-container">
+          <h3><i class="fas fa-chart-pie"></i> Confirmações por Método</h3>
+          <canvas id="metodoChart" width="400" height="200"></canvas>
+        </div>
+
+        <div class="chart-container">
+          <h3>
+            <i class="fas fa-chart-line"></i> Confirmações (Últimos 7 Dias)
+          </h3>
+          <canvas id="timelineChart" width="400" height="200"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="error-container" id="errorContainer" style="display: none">
+      <h3><i class="fas fa-exclamation-circle"></i> Erro</h3>
+      <p id="errorMessage"></p>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  let metodoChart = null;
+  let timelineChart = null;
+
+  async function loadEstatisticas() {
+    const loading = document.getElementById("loading");
+    const content = document.getElementById("estatisticasContent");
+    const errorContainer = document.getElementById("errorContainer");
+
+    loading.style.display = "block";
+    content.style.display = "none";
+    errorContainer.style.display = "none";
+
+    try {
+      const response = await fetch("/api/estatisticas");
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      // Atualiza os cards
+      document.getElementById("totalPessoas").textContent = data.total_pessoas;
+      document.getElementById("totalReconhecimentos").textContent =
+        data.total_reconhecimentos;
+      document.getElementById("reconhecimentosCamera").textContent =
+        data.reconhecimentos_metodo.camera || 0;
+      document.getElementById("reconhecimentosUpload").textContent =
+        data.reconhecimentos_metodo.upload || 0;
+
+      // Cria gráfico de métodos
+      createMetodoChart(data.reconhecimentos_metodo);
+
+      // Cria gráfico de timeline
+      createTimelineChart(data.reconhecimentos_7_dias);
+
+      content.style.display = "block";
+    } catch (error) {
+      document.getElementById("errorMessage").textContent =
+        "Erro ao carregar estatísticas: " + error.message;
+      errorContainer.style.display = "block";
+    } finally {
+      loading.style.display = "none";
+    }
+  }
+
+  function createMetodoChart(metodoData) {
+    const ctx = document.getElementById("metodoChart").getContext("2d");
+
+    if (metodoChart) {
+      metodoChart.destroy();
+    }
+
+    const labels = Object.keys(metodoData).map((key) =>
+      key === "camera" ? "Câmera" : "Upload"
+    );
+    const values = Object.values(metodoData);
+
+    metodoChart = new Chart(ctx, {
+      type: "doughnut",
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            data: values,
+            backgroundColor: ["#4361ee", "#4cc9f0"],
+            borderWidth: 2,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: {
+            position: "bottom",
+          },
+        },
+      },
+    });
+  }
+
+  function createTimelineChart(timelineData) {
+    const ctx = document.getElementById("timelineChart").getContext("2d");
+
+    if (timelineChart) {
+      timelineChart.destroy();
+    }
+
+    const labels = Object.keys(timelineData);
+    const values = Object.values(timelineData);
+
+    timelineChart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: "Confirmações por Dia",
+            data: values,
+            borderColor: "#7209b7",
+            backgroundColor: "rgba(114, 9, 183, 0.1)",
+            borderWidth: 3,
+            fill: true,
+            tension: 0.4,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              stepSize: 1,
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // Carrega as estatísticas quando a página é aberta
+  document.addEventListener("DOMContentLoaded", loadEstatisticas);
+
+  // Atualiza a cada 30 segundos
+  setInterval(loadEstatisticas, 30000);
+</script>
+{% endblock %}

@@ -1,0 +1,152 @@
+{% extends "base.html" %} {% block content %}
+<div class="card">
+  <div class="card-header">
+    <h1><i class="fas fa-users"></i> Pessoas Cadastradas</h1>
+    <p>Gerencie as pessoas cadastradas no sistema</p>
+  </div>
+
+  <div class="card-body">
+    <div
+      style="
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+      "
+    >
+      <h2>Lista de Pessoas</h2>
+      <a href="{{ url_for('cadastro') }}" class="btn btn-primary">
+        <i class="fas fa-user-plus"></i> Nova Pessoa
+      </a>
+    </div>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p>Carregando pessoas...</p>
+    </div>
+
+    <div id="pessoasList" style="display: none">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>Contato</th>
+            <th>Data de Cadastro</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="pessoasTableBody">
+          <!-- Dados serão preenchidos via JavaScript -->
+        </tbody>
+      </table>
+    </div>
+
+    <div class="error-container" id="errorContainer" style="display: none">
+      <h3><i class="fas fa-exclamation-circle"></i> Erro</h3>
+      <p id="errorMessage"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+  async function loadPessoas() {
+    const loading = document.getElementById("loading");
+    const pessoasList = document.getElementById("pessoasList");
+    const errorContainer = document.getElementById("errorContainer");
+
+    loading.style.display = "block";
+    pessoasList.style.display = "none";
+    errorContainer.style.display = "none";
+
+    try {
+      const response = await fetch("/api/pessoas");
+      const pessoas = await response.json();
+
+      const tableBody = document.getElementById("pessoasTableBody");
+      tableBody.innerHTML = "";
+
+      if (pessoas.length === 0) {
+        tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="4" style="text-align: center; padding: 2rem;">
+                            <i class="fas fa-users" style="font-size: 3rem; color: #6c757d; margin-bottom: 1rem;"></i>
+                            <p>Nenhuma pessoa cadastrada ainda.</p>
+                            <a href="{{ url_for('cadastro') }}" class="btn btn-primary" style="margin-top: 1rem;">
+                                <i class="fas fa-user-plus"></i> Cadastrar Primeira Pessoa
+                            </a>
+                        </td>
+                    </tr>
+                `;
+      } else {
+        pessoas.forEach((pessoa) => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+                        <td>
+                            <strong>${pessoa.nome}</strong>
+                        </td>
+                        <td>
+                            ${
+                              pessoa.email
+                                ? `<div><i class="fas fa-envelope"></i> ${pessoa.email}</div>`
+                                : ""
+                            }
+                            ${
+                              pessoa.telefone
+                                ? `<div><i class="fas fa-phone"></i> ${pessoa.telefone}</div>`
+                                : ""
+                            }
+                        </td>
+                        <td>
+                            ${new Date(pessoa.data_cadastro).toLocaleDateString(
+                              "pt-BR"
+                            )}
+                        </td>
+                        <td>
+                            <button class="btn btn-danger" onclick="deletarPessoa(${
+                              pessoa.id
+                            }, '${pessoa.nome}')">
+                                <i class="fas fa-trash"></i> Remover
+                            </button>
+                        </td>
+                    `;
+          tableBody.appendChild(row);
+        });
+      }
+
+      pessoasList.style.display = "block";
+    } catch (error) {
+      document.getElementById("errorMessage").textContent =
+        "Erro ao carregar pessoas: " + error.message;
+      errorContainer.style.display = "block";
+    } finally {
+      loading.style.display = "none";
+    }
+  }
+
+  async function deletarPessoa(id, nome) {
+    if (!confirm(`Tem certeza que deseja remover "${nome}" do sistema?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/deletar_pessoa/${id}`, {
+        method: "DELETE",
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert(result.message);
+        loadPessoas(); // Recarrega a lista
+      } else {
+        alert("Erro: " + result.error);
+      }
+    } catch (error) {
+      alert("Erro ao remover pessoa: " + error.message);
+    }
+  }
+
+  // Carrega a lista quando a página é aberta
+  document.addEventListener("DOMContentLoaded", loadPessoas);
+</script>
+{% endblock %}
