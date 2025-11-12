@@ -63,14 +63,18 @@
       <div class="grid grid-2 mobile-stack" style="margin-top: 1.5rem">
         <div class="chart-container">
           <h3><i class="fas fa-chart-pie"></i> Confirmações por Método</h3>
-          <canvas id="metodoChart" width="400" height="200"></canvas>
+          <div style="position: relative; height: 300px; width: 100%">
+            <canvas id="metodoChart"></canvas>
+          </div>
         </div>
 
         <div class="chart-container">
           <h3>
             <i class="fas fa-chart-line"></i> Confirmações (Últimos 7 Dias)
           </h3>
-          <canvas id="timelineChart" width="400" height="200"></canvas>
+          <div style="position: relative; height: 300px; width: 100%">
+            <canvas id="timelineChart"></canvas>
+          </div>
         </div>
       </div>
     </div>
@@ -86,8 +90,12 @@
 <script>
   let metodoChart = null;
   let timelineChart = null;
+  let estatisticasCarregadas = false;
 
   async function loadEstatisticas() {
+    // Evita múltiplas chamadas simultâneas
+    if (estatisticasCarregadas) return;
+
     const loading = document.getElementById("loading");
     const content = document.getElementById("estatisticasContent");
     const errorContainer = document.getElementById("errorContainer");
@@ -120,6 +128,7 @@
       createTimelineChart(data.reconhecimentos_7_dias);
 
       content.style.display = "block";
+      estatisticasCarregadas = true;
     } catch (error) {
       document.getElementById("errorMessage").textContent =
         "Erro ao carregar estatísticas: " + error.message;
@@ -130,8 +139,10 @@
   }
 
   function createMetodoChart(metodoData) {
-    const ctx = document.getElementById("metodoChart").getContext("2d");
+    const ctx = document.getElementById("metodoChart");
+    if (!ctx) return;
 
+    // Destrói gráfico existente
     if (metodoChart) {
       metodoChart.destroy();
     }
@@ -140,6 +151,19 @@
       key === "camera" ? "Câmera" : "Upload"
     );
     const values = Object.values(metodoData);
+
+    // Verifica se há dados para mostrar
+    const total = values.reduce((sum, value) => sum + value, 0);
+    if (total === 0) {
+      ctx.style.display = "none";
+      ctx.closest(".chart-container").innerHTML += `
+        <div style="text-align: center; padding: 2rem; color: #666;">
+          <i class="fas fa-chart-pie" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+          <p>Nenhum dado disponível para exibir</p>
+        </div>
+      `;
+      return;
+    }
 
     metodoChart = new Chart(ctx, {
       type: "doughnut",
@@ -150,6 +174,7 @@
             data: values,
             backgroundColor: ["#4361ee", "#4cc9f0"],
             borderWidth: 2,
+            borderColor: "#fff",
           },
         ],
       },
@@ -159,21 +184,55 @@
         plugins: {
           legend: {
             position: "bottom",
+            labels: {
+              padding: 20,
+              usePointStyle: true,
+            },
           },
+          tooltip: {
+            callbacks: {
+              label: function (context) {
+                const label = context.label || "";
+                const value = context.raw || 0;
+                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                const percentage = Math.round((value / total) * 100);
+                return `${label}: ${value} (${percentage}%)`;
+              },
+            },
+          },
+        },
+        animation: {
+          animateScale: true,
+          animateRotate: true,
         },
       },
     });
   }
 
   function createTimelineChart(timelineData) {
-    const ctx = document.getElementById("timelineChart").getContext("2d");
+    const ctx = document.getElementById("timelineChart");
+    if (!ctx) return;
 
+    // Destrói gráfico existente
     if (timelineChart) {
       timelineChart.destroy();
     }
 
     const labels = Object.keys(timelineData);
     const values = Object.values(timelineData);
+
+    // Verifica se há dados para mostrar
+    const hasData = values.some((value) => value > 0);
+    if (!hasData) {
+      ctx.style.display = "none";
+      ctx.closest(".chart-container").innerHTML += `
+        <div style="text-align: center; padding: 2rem; color: #666;">
+          <i class="fas fa-chart-line" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+          <p>Nenhum dado disponível para exibir</p>
+        </div>
+      `;
+      return;
+    }
 
     timelineChart = new Chart(ctx, {
       type: "line",
@@ -188,6 +247,11 @@
             borderWidth: 3,
             fill: true,
             tension: 0.4,
+            pointBackgroundColor: "#7209b7",
+            pointBorderColor: "#fff",
+            pointBorderWidth: 2,
+            pointRadius: 5,
+            pointHoverRadius: 7,
           },
         ],
       },
@@ -200,16 +264,81 @@
             ticks: {
               stepSize: 1,
             },
+            grid: {
+              color: "rgba(0, 0, 0, 0.1)",
+            },
           },
+          x: {
+            grid: {
+              color: "rgba(0, 0, 0, 0.1)",
+            },
+          },
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: "top",
+          },
+        },
+        interaction: {
+          intersect: false,
+          mode: "index",
+        },
+        animation: {
+          duration: 1000,
         },
       },
     });
   }
 
   // Carrega as estatísticas quando a página é aberta
-  document.addEventListener("DOMContentLoaded", loadEstatisticas);
+  document.addEventListener("DOMContentLoaded", function () {
+    // Pequeno delay para garantir que o DOM esteja totalmente renderizado
+    setTimeout(loadEstatisticas, 100);
+  });
 
-  // Atualiza a cada 30 segundos
-  setInterval(loadEstatisticas, 30000);
+  // Recarrega quando a visibilidade da página muda (quando o usuário volta para a aba)
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) {
+      // Recarrega estatísticas após 2 segundos quando a página se torna visível
+      setTimeout(loadEstatisticas, 2000);
+    }
+  });
+
+  // Atualiza a cada 60 segundos (aumentado para evitar sobrecarga)
+  setInterval(loadEstatisticas, 60000);
+
+  // Recarrega quando a janela é redimensionada (com debounce)
+  let resizeTimeout;
+  window.addEventListener("resize", function () {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(function () {
+      if (metodoChart) {
+        metodoChart.resize();
+      }
+      if (timelineChart) {
+        timelineChart.resize();
+      }
+    }, 250);
+  });
 </script>
+
+<style>
+  /* Estilos específicos para os gráficos */
+  .chart-container {
+    position: relative;
+    min-height: 300px;
+  }
+
+  .chart-container canvas {
+    max-width: 100%;
+    height: auto !important;
+  }
+
+  @media (max-width: 768px) {
+    .chart-container {
+      min-height: 250px;
+    }
+  }
+</style>
 {% endblock %}
