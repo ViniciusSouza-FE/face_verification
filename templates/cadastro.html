@@ -149,6 +149,16 @@
       <small>Isso pode levar alguns segundos</small>
     </div>
 
+    <style>
+      /* Melhor responsividade para vídeo e preview no cadastro */
+      #video { width: 100%; max-width: 420px; border-radius: 10px; }
+      #preview { width: 100%; max-width: 200px; height: auto; object-fit: cover; }
+      @media (max-width: 480px) {
+        .card-body { padding: 1rem; }
+        .btn { padding: 0.9rem 1rem; font-size: 1rem; }
+      }
+    </style>
+
     <div class="result-container" id="cadastroSuccess" style="display: none">
       <h3><i class="fas fa-check-circle"></i> Cadastro Realizado!</h3>
       <p id="successMessage"></p>

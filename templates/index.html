@@ -85,16 +85,21 @@
 
         <div class="camera-container" id="cameraContainer">
           <video id="video" autoplay playsinline></video>
+          <img id="cameraPreviewImg" alt="Preview da foto" style="display:none; width:100%; max-width:420px; margin-top:1rem; border-radius:12px;" />
           <div
             style="
               margin-top: 1rem;
               display: flex;
               gap: 0.5rem;
               justify-content: center;
+              flex-wrap: wrap;
             "
           >
-            <button class="btn btn-success" onclick="capturePhoto()">
+            <button class="btn btn-success" id="captureBtn" onclick="capturePhoto()">
               <i class="fas fa-camera"></i> Capturar Foto
+            </button>
+            <button class="btn btn-primary" id="cameraConfirmBtn" style="display:none" onclick="confirmCameraUpload()">
+              <i class="fas fa-check"></i> Confirmar Identidade
             </button>
             <button class="btn btn-secondary" onclick="stopCamera()">
               <i class="fas fa-times"></i> Fechar Câmera
@@ -131,6 +136,18 @@
       .confidence-indicator {
         color: #666;
         font-style: italic;
+      }
+      /* Responsividade: video e preview ocupam largura disponível em mobile */
+      #video {
+        width: 100%;
+        max-width: 420px;
+        border-radius: 12px;
+      }
+      #cameraPreviewImg {
+        width: 100%;
+        max-width: 420px;
+        object-fit: cover;
+        border-radius: 12px;
       }
       .result-container {
         transition: all 0.3s ease-in-out;
@@ -209,24 +226,57 @@
     cameraContainer.style.display = "none";
   }
 
-  // Capturar foto da câmera
+  // Capturar foto da câmera (mostra preview e exige confirmação antes de enviar)
+  let lastCapturedDataUrl = null;
   function capturePhoto() {
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
     const context = canvas.getContext("2d");
-    context.drawImage(video, 0, 0);
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     const imageData = canvas.toDataURL("image/jpeg");
-    processCameraImage(imageData);
+    lastCapturedDataUrl = imageData;
+
+    // Mostrar preview
+    const previewImg = document.getElementById('cameraPreviewImg');
+    previewImg.src = imageData;
+    previewImg.style.display = 'block';
+
+    // Mostrar botão de confirmar
+    document.getElementById('cameraConfirmBtn').style.display = 'inline-flex';
+    // Opcional: esconder o vídeo para foco na foto
+    // video.style.display = 'none';
   }
 
-  // Processar imagem da câmera
-  async function processCameraImage(imageData) {
-    const documento = document.getElementById('documentoCamera').value.trim();
-    
+  // Envia a captura confirmada para reconhecimento
+  async function confirmCameraUpload() {
+    const documento = (document.getElementById('documentoCamera').value || document.getElementById('documentoUpload').value || '').trim();
     if (!documento) {
       showError("Por favor, informe o número do documento");
+      return;
+    }
+
+    // Se já existe um arquivo no fileInput (por exemplo camera nativa mobile), usamos direto
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      showLoading(cameraLoading);
+      hideResults();
+      try {
+        await processUpload();
+      } catch (error) {
+        showError('Erro ao enviar a foto: ' + error.message);
+      } finally {
+        hideLoading(cameraLoading);
+        stopCamera();
+        const previewImg = document.getElementById('cameraPreviewImg');
+        if (previewImg) previewImg.style.display = 'none';
+        document.getElementById('cameraConfirmBtn').style.display = 'none';
+      }
+      return;
+    }
+
+    if (!lastCapturedDataUrl) {
+      showError('Nenhuma foto capturada.');
       return;
     }
 
@@ -234,31 +284,35 @@
     hideResults();
 
     try {
-      const response = await fetch("/api/recognize_camera", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ 
-          image: imageData,
-          documento: documento 
-        }),
-      });
+      // Converter dataURL para blob/file e usar o mesmo endpoint de upload para consistência
+      const res = await fetch(lastCapturedDataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], 'camera.jpg', { type: blob.type });
 
-      const result = await response.json();
-      handleRecognitionResult(result);
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+      fileInput.files = dataTransfer.files;
+
+      // chamamos processUpload que detecta ambos campos de documento
+      await processUpload();
     } catch (error) {
-      showError("Erro ao processar imagem: " + error.message);
+      showError('Erro ao enviar a foto: ' + error.message);
     } finally {
       hideLoading(cameraLoading);
       stopCamera();
+      // reset preview and lastCaptured
+      lastCapturedDataUrl = null;
+      const previewImg = document.getElementById('cameraPreviewImg');
+      if (previewImg) previewImg.style.display = 'none';
+      document.getElementById('cameraConfirmBtn').style.display = 'none';
     }
   }
 
-  // Processar upload de arquivo
+  // Processar upload de arquivo (usado tanto para upload tradicional quanto para confirmações de câmera)
   async function processUpload() {
     const file = fileInput.files[0];
-    const documento = document.getElementById('documentoUpload').value.trim();
+    // tenta obter documento dos dois campos (upload ou camera)
+    const documento = (document.getElementById('documentoUpload').value || document.getElementById('documentoCamera').value || '').trim();
 
     if (!documento) {
       showError("Por favor, informe o número do documento");
@@ -359,19 +413,28 @@
     hideResults();
   });
 
-  // Mobile camera input (native overlay) -> reuse same upload flow
+  // Mobile camera input (native overlay) -> show preview and require confirmation before sending
   const mobileCameraInput = document.getElementById('mobileCameraInput');
   if (mobileCameraInput) {
     mobileCameraInput.addEventListener('change', function() {
       if (this.files && this.files[0]) {
-        // copy file into the hidden fileInput to reuse processUpload()
+        // coloca no fileInput para reuso
         const dataTransfer = new DataTransfer();
         dataTransfer.items.add(this.files[0]);
         fileInput.files = dataTransfer.files;
+
+        // mostrar preview da imagem e botão de confirmar
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const previewImg = document.getElementById('cameraPreviewImg');
+          previewImg.src = e.target.result;
+          previewImg.style.display = 'block';
+          document.getElementById('cameraConfirmBtn').style.display = 'inline-flex';
+        };
+        reader.readAsDataURL(this.files[0]);
+
         document.querySelector('.file-input p').textContent = `Foto capturada: ${this.files[0].name}`;
         hideResults();
-        // Preenche o campo de documento se o usuário deixou em branco? mantemos como está
-        processUpload();
       }
     });
   }
