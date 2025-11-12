@@ -77,10 +77,12 @@
                 class="file-input"
                 onclick="document.getElementById('foto').click()"
                 style="
-                  height: 200px;
+                  min-height: 140px;
+                  height: auto;
                   display: flex;
                   flex-direction: column;
                   justify-content: center;
+                  padding: 1.25rem;
                 "
               >
                 <i
@@ -104,7 +106,7 @@
 
             <!-- Área da Câmera -->
             <div id="cameraArea" style="display: none; text-align: center;">
-              <video id="video" autoplay playsinline style="width: 100%; max-width: 400px; border-radius: 10px;"></video>
+              <video id="video" autoplay playsinline style="width: 100%; max-width: 400px; border-radius: 10px; display:block; margin:0 auto"></video>
               <div style="margin-top: 1rem;">
                 <button type="button" class="btn btn-success" onclick="capturarFoto()">
                   <i class="fas fa-camera"></i> Capturar Foto
