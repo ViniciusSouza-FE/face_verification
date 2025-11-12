@@ -1,5 +1,4 @@
---- START OF FILE code.txt (index) --- {% extends "base.html" %} {% block
-content %}
+{% extends "base.html" %} {% block content %}
 <div class="card">
   <div class="card-header">
     <h1><i class="fas fa-user-check"></i> Confirmação Facial</h1>
@@ -7,7 +6,7 @@ content %}
   </div>
 
   <div class="card-body">
-    <div class="grid grid-2">
+    <div class="grid grid-2 mobile-stack">
       <!-- Método 1: Upload de Arquivo -->
       <div class="method-card">
         <div class="method-icon">
@@ -25,6 +24,7 @@ content %}
             class="form-control"
             id="documentoUpload"
             required
+            placeholder="Digite o número do documento"
           />
         </div>
 
@@ -75,44 +75,43 @@ content %}
             class="form-control"
             id="documentoCamera"
             required
+            placeholder="Digite o número do documento"
           />
         </div>
 
-        <button class="btn btn-primary" onclick="startCamera()">
-          <i class="fas fa-camera"></i> Abrir Câmera
-        </button>
-        <!-- Mobile-friendly camera input: opens native camera overlay on mobile devices -->
-        <input
-          type="file"
-          id="mobileCameraInput"
-          accept="image/*"
-          capture="environment"
-          style="display: none"
-        />
+        <div class="mobile-stack">
+          <button class="btn btn-primary" onclick="startCamera()">
+            <i class="fas fa-camera"></i> Abrir Câmera
+          </button>
+          <!-- Mobile-friendly camera input: opens native camera overlay on mobile devices -->
+          <input
+            type="file"
+            id="mobileCameraInput"
+            accept="image/*"
+            capture="environment"
+            style="display: none"
+          />
+        </div>
 
         <div class="camera-container" id="cameraContainer">
-          <video id="video" autoplay playsinline></video>
+          <video
+            id="video"
+            autoplay
+            playsinline
+            class="mobile-full-width"
+          ></video>
           <img
             id="cameraPreviewImg"
             alt="Preview da foto"
             style="
               display: none;
               width: 100%;
-              max-width: 420px;
+              max-width: 100%;
               margin-top: 1rem;
-              border-radius: 12px;
+              border-radius: 10px;
             "
           />
-          <div
-            class="camera-btns"
-            style="
-              margin-top: 1rem;
-              display: flex;
-              gap: 0.5rem;
-              justify-content: center;
-              flex-wrap: wrap;
-            "
-          >
+          <div class="mobile-stack" style="margin-top: 1rem">
             <button
               class="btn btn-success"
               id="captureBtn"
@@ -169,60 +168,52 @@ content %}
         color: #666;
         font-style: italic;
       }
-      /* Responsividade: video e preview ocupam largura disponível em mobile */
-      #video {
+
+      #video,
+      #cameraPreviewImg {
         width: 100%;
-        max-width: 420px;
-        border-radius: 12px;
+        max-width: 100%;
+        border-radius: 10px;
         display: block;
         margin: 0 auto;
         height: auto;
-        max-height: 60vh;
+        max-height: 50vh;
       }
-      #cameraPreviewImg {
-        width: 100%;
-        max-width: 420px;
-        object-fit: cover;
-        border-radius: 12px;
-        display: block;
-        margin: 0 auto;
-        max-height: 60vh;
-      }
+
       .result-container {
         transition: all 0.3s ease-in-out;
         border: 1px solid;
         border-radius: 8px;
-        padding: 20px;
-      }
-      #resultTitle {
-        margin-bottom: 15px;
-      }
-      .confidence-level {
-        padding: 3px 8px;
-        border-radius: 4px;
-        font-weight: bold;
-      }
-      /* Removendo as classes não utilizadas */
-      #resultContainer[style*="background-color: #d4edda"] #resultTitle {
-        color: #28a745 !important;
-      }
-      #resultContainer[style*="background-color: #fff3cd"] #resultTitle {
-        color: #856404 !important;
-      }
-      #resultContainer[style*="background-color: #f8d7da"] #resultTitle {
-        color: #dc3545 !important;
+        padding: 1.25rem;
       }
 
-      /* NOVO CSS para botões da câmera no mobile */
-      @media (max-width: 600px) {
-        .camera-btns button {
-          flex-grow: 1;
-          min-width: 100%;
+      @media (max-width: 768px) {
+        .method-card {
+          margin-bottom: 1rem;
+        }
+
+        .mobile-stack {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+
+        .btn {
           margin-bottom: 0.5rem;
         }
-        .camera-btns button {
-          padding: 0.75rem 0.5rem;
-          font-size: 0.95rem;
+      }
+
+      @media (max-width: 480px) {
+        .card-body {
+          padding: 0.75rem;
+        }
+
+        .method-card {
+          padding: 1rem;
+        }
+
+        .file-input {
+          padding: 1rem;
         }
       }
     </style>
@@ -297,8 +288,6 @@ content %}
 
     // Mostrar botão de confirmar
     document.getElementById("cameraConfirmBtn").style.display = "inline-flex";
-    // Opcional: esconder o vídeo para foco na foto
-    // video.style.display = 'none';
   }
 
   // Envia a captura confirmada para reconhecimento
@@ -471,17 +460,7 @@ content %}
     `;
 
     resultConfidence.textContent = confidence.toFixed(1) + "%";
-
-    // Aprimoramento da mensagem de aviso de similaridade
-    if (isLowSimilarity) {
-      similarityWarning.textContent =
-        "⚠️ Baixa similaridade: Recomenda-se uma segunda verificação ou foto com melhor qualidade.";
-      similarityWarning.style.color = color; // Cor de aviso para destacar
-      similarityWarning.style.display = "block";
-    } else {
-      similarityWarning.textContent = "";
-      similarityWarning.style.display = "none";
-    }
+    similarityWarning.style.display = isLowSimilarity ? "block" : "none";
 
     // Aplica cor de fundo ao container de resultados
     resultContainer.style.backgroundColor = bgColor;

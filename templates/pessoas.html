@@ -1,5 +1,4 @@
---- START OF FILE code.txt (pessoas) --- {% extends "base.html" %} {% block
-content %}
+{% extends "base.html" %} {% block content %}
 <div class="card">
   <div class="card-header">
     <h1><i class="fas fa-users"></i> Pessoas Cadastradas</h1>
@@ -7,16 +6,13 @@ content %}
   </div>
 
   <div class="card-body">
-    <div
-      style="
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 2rem;
-      "
-    >
+    <div class="mobile-stack" style="margin-bottom: 1.5rem">
       <h2>Lista de Pessoas</h2>
-      <a href="{{ url_for('cadastro') }}" class="btn btn-primary">
+      <a
+        href="{{ url_for('cadastro') }}"
+        class="btn btn-primary"
+        style="max-width: 200px"
+      >
         <i class="fas fa-user-plus"></i> Nova Pessoa
       </a>
     </div>
@@ -27,19 +23,21 @@ content %}
     </div>
 
     <div id="pessoasList" style="display: none">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Nome</th>
-            <th>Contato</th>
-            <th>Data de Cadastro</th>
-            <th>Ações</th>
-          </tr>
-        </thead>
-        <tbody id="pessoasTableBody">
-          <!-- Dados serão preenchidos via JavaScript -->
-        </tbody>
-      </table>
+      <div style="overflow-x: auto">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Contato</th>
+              <th>Data de Cadastro</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="pessoasTableBody">
+            <!-- Dados serão preenchidos via JavaScript -->
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <div class="error-container" id="errorContainer" style="display: none">
@@ -68,48 +66,46 @@ content %}
 
       if (pessoas.length === 0) {
         tableBody.innerHTML = `
-                    <tr>
-                        <td colspan="4" style="text-align: center; padding: 2rem;">
-                            <i class="fas fa-users" style="font-size: 3rem; color: #6c757d; margin-bottom: 1rem;"></i>
-                            <p>Nenhuma pessoa cadastrada ainda.</p>
-                            <a href="{{ url_for('cadastro') }}" class="btn btn-primary" style="margin-top: 1rem;">
-                                <i class="fas fa-user-plus"></i> Cadastrar Primeira Pessoa
-                            </a>
-                        </td>
-                    </tr>
-                `;
+          <tr>
+            <td colspan="4" style="text-align: center; padding: 2rem;">
+              <i class="fas fa-users" style="font-size: 2.5rem; color: #6c757d; margin-bottom: 1rem;"></i>
+              <p>Nenhuma pessoa cadastrada ainda.</p>
+              <a href="{{ url_for('cadastro') }}" class="btn btn-primary" style="margin-top: 1rem; max-width: 250px;">
+                <i class="fas fa-user-plus"></i> Cadastrar Primeira Pessoa
+              </a>
+            </td>
+          </tr>
+        `;
       } else {
         pessoas.forEach((pessoa) => {
           const row = document.createElement("tr");
           row.innerHTML = `
-                        <td data-label="Nome">
-                            <strong>${pessoa.nome}</strong>
-                        </td>
-                        <td data-label="Contato">
-                            ${
-                              pessoa.email
-                                ? `<div><i class="fas fa-envelope"></i> ${pessoa.email}</div>`
-                                : ""
-                            }
-                            ${
-                              pessoa.telefone
-                                ? `<div><i class="fas fa-phone"></i> ${pessoa.telefone}</div>`
-                                : ""
-                            }
-                        </td>
-                        <td data-label="Data de Cadastro">
-                            ${new Date(pessoa.data_cadastro).toLocaleDateString(
-                              "pt-BR"
-                            )}
-                        </td>
-                        <td data-label="Ações">
-                            <button class="btn btn-danger" onclick="deletarPessoa(${
-                              pessoa.id
-                            }, '${pessoa.nome}')">
-                                <i class="fas fa-trash"></i> Remover
-                            </button>
-                        </td>
-                    `;
+            <td>
+              <strong>${pessoa.nome}</strong>
+            </td>
+            <td>
+              ${
+                pessoa.email
+                  ? `<div style="margin-bottom: 0.25rem;"><i class="fas fa-envelope"></i> ${pessoa.email}</div>`
+                  : ""
+              }
+              ${
+                pessoa.telefone
+                  ? `<div><i class="fas fa-phone"></i> ${pessoa.telefone}</div>`
+                  : ""
+              }
+            </td>
+            <td>
+              ${new Date(pessoa.data_cadastro).toLocaleDateString("pt-BR")}
+            </td>
+            <td>
+              <button class="btn btn-danger" onclick="deletarPessoa(${
+                pessoa.id
+              }, '${pessoa.nome.replace(/'/g, "\\'")}')">
+                <i class="fas fa-trash"></i> Remover
+              </button>
+            </td>
+          `;
           tableBody.appendChild(row);
         });
       }
