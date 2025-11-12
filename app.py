@@ -36,7 +36,9 @@ except ImportError as e:
     sys.exit(1)
 
 try:
-    from PIL import Image
+    from PIL import Image, ImageFile
+    # Permitir processamento de imagens truncadas
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
     print("✅ Pillow importado")
 except ImportError as e:
     print(f"❌ Pillow não disponível: {e}")
@@ -94,12 +96,12 @@ app = Flask(__name__)
 app.json_encoder = NumpyEncoder
 
 UPLOAD_FOLDER = "static/uploads"
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'jfif', 'webp'}
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-key-123')
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
 
 def clean_database_url(url):
     if not url: return url
@@ -192,25 +194,85 @@ def safe_pickle_loads(data):
                 print(f"❌ Erro final ao carregar pickle: {e}")
                 return None
 
+def optimize_image_for_recognition(image):
+    """
+    Otimiza a imagem para reconhecimento facial mantendo qualidade adequada
+    """
+    try:
+        # Converte para RGB se necessário
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+        
+        # Obtém dimensões originais
+        width, height = image.size
+        
+        # Define tamanho máximo ideal para reconhecimento facial
+        # Modelos faciais geralmente trabalham melhor com resoluções entre 500-1000px
+        max_size = 800
+        min_size = 300
+        
+        # Se a imagem for muito grande, redimensiona mantendo aspect ratio
+        if width > max_size or height > max_size:
+            # Calcula novas dimensões mantendo proporção
+            if width > height:
+                new_width = max_size
+                new_height = int((height / width) * max_size)
+            else:
+                new_height = max_size
+                new_width = int((width / height) * max_size)
+            
+            # Garante que não fique muito pequena
+            if new_width < min_size or new_height < min_size:
+                scale_factor = max(min_size / new_width, min_size / new_height)
+                new_width = int(new_width * scale_factor)
+                new_height = int(new_height * scale_factor)
+            
+            print(f"🔄 Redimensionando imagem de {width}x{height} para {new_width}x{new_height}")
+            image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+        return image
+        
+    except Exception as e:
+        print(f"⚠️ Erro ao otimizar imagem: {e}")
+        return image
+
 def extract_embedding_optimized(image_path):
     if not DEEPFACE_AVAILABLE:
         print("❌ DeepFace não está disponível para extrair embedding.")
         return None
     try:
         print("🔄 Extraindo embedding facial com DeepFace...")
-        embedding_objs = DeepFace.represent(
-            img_path=image_path, model_name="Facenet", detector_backend="opencv",
-            enforce_detection=True, align=True, normalization="base"
-        )
-        if embedding_objs and len(embedding_objs) > 0:
-            embedding_array = np.array(embedding_objs[0]['embedding'], dtype=np.float32)
-            norm = np.linalg.norm(embedding_array)
-            if norm > 0: embedding_array /= norm
-            print(f"📊 Embedding extraído: shape {embedding_array.shape}, norma: {np.linalg.norm(embedding_array):.4f}")
-            return pickle.dumps(embedding_array, protocol=4)
-        else:
-            print("❌ Nenhum rosto detectado na imagem pelo DeepFace.")
-            return None
+        
+        # Tenta diferentes backends de detecção
+        backends = ['opencv', 'ssd', 'retinaface']
+        
+        for backend in backends:
+            try:
+                print(f"🔍 Tentando detector: {backend}")
+                embedding_objs = DeepFace.represent(
+                    img_path=image_path, 
+                    model_name="Facenet", 
+                    detector_backend=backend,
+                    enforce_detection=True, 
+                    align=True, 
+                    normalization="base"
+                )
+                
+                if embedding_objs and len(embedding_objs) > 0:
+                    embedding_array = np.array(embedding_objs[0]['embedding'], dtype=np.float32)
+                    norm = np.linalg.norm(embedding_array)
+                    if norm > 0: 
+                        embedding_array /= norm
+                    print(f"📊 Embedding extraído com {backend}: shape {embedding_array.shape}, norma: {np.linalg.norm(embedding_array):.4f}")
+                    return pickle.dumps(embedding_array, protocol=4)
+                    
+            except Exception as e:
+                print(f"⚠️ Detector {backend} falhou: {e}")
+                continue
+        
+        print("❌ Nenhum rosto detectado na imagem por nenhum detector.")
+        return None
+        
     except Exception as e:
         print(f"❌ Erro crítico no DeepFace durante a extração: {e}")
         return None
@@ -422,17 +484,21 @@ def cadastrar_pessoa():
             return jsonify({"error": "Já existe uma pessoa cadastrada com este número de documento."})
 
         image = Image.open(file.stream)
-        image.thumbnail((400, 400), Image.Resampling.LANCZOS)
+        
+        # OTIMIZAÇÃO: Usa função melhorada de otimização
+        image = optimize_image_for_recognition(image)
         
         temp_filename = f"temp_{uuid.uuid4().hex}.jpg"
         temp_path = os.path.join(app.config['UPLOAD_FOLDER'], temp_filename)
-        image.save(temp_path, 'JPEG', quality=85)
+        
+        # Qualidade maior para preservar detalhes faciais
+        image.save(temp_path, 'JPEG', quality=92, optimize=True)
 
         embedding = extract_embedding_optimized(temp_path)
         os.remove(temp_path)
 
         if embedding is None:
-            return jsonify({"error": "Não foi possível detectar um rosto na foto. Tente uma imagem mais nítida."})
+            return jsonify({"error": "Não foi possível detectar um rosto na foto. Tente uma imagem mais nítida e bem iluminada."})
         
         cursor.execute(
             'INSERT INTO pessoas (nome, email, telefone, documento, embedding) VALUES (%s, %s, %s, %s, %s) RETURNING id',
@@ -460,11 +526,15 @@ def recognize_upload():
             return jsonify({"error": "Número do documento é obrigatório"})
 
         image = Image.open(file.stream)
-        image.thumbnail((400, 400), Image.Resampling.LANCZOS)
+        
+        # OTIMIZAÇÃO: Usa a mesma função de otimização
+        image = optimize_image_for_recognition(image)
         
         filename = f"{uuid.uuid4().hex}.jpg"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        image.save(filepath, 'JPEG', quality=85)
+        
+        # Qualidade maior para preservar detalhes faciais
+        image.save(filepath, 'JPEG', quality=92, optimize=True)
 
         result = facial_recognition_from_embedding(filepath, documento)
         os.remove(filepath)
@@ -486,11 +556,15 @@ def recognize_camera():
         if 'documento' not in data: return jsonify({"error": "Número do documento é obrigatório"})
 
         image = base64_to_image(data['image'])
-        image.thumbnail((400, 400), Image.Resampling.LANCZOS)
+        
+        # OTIMIZAÇÃO: Usa a mesma função de otimização
+        image = optimize_image_for_recognition(image)
         
         filename = f"{uuid.uuid4().hex}.jpg"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        image.save(filepath, 'JPEG', quality=85)
+        
+        # Qualidade maior para preservar detalhes faciais
+        image.save(filepath, 'JPEG', quality=92, optimize=True)
 
         result = facial_recognition_from_embedding(filepath, data['documento'])
         os.remove(filepath)
