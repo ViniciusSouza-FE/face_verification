@@ -430,6 +430,11 @@
           previewImg.src = e.target.result;
           previewImg.style.display = 'block';
           document.getElementById('cameraConfirmBtn').style.display = 'inline-flex';
+          // Garantir que o container da câmera esteja visível em mobile
+          const camContainer = document.getElementById('cameraContainer');
+          if (camContainer) camContainer.style.display = 'block';
+          // Rolar para o preview em telas pequenas
+          try { previewImg.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
         };
         reader.readAsDataURL(this.files[0]);
 
