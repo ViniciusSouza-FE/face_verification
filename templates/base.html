@@ -1,3 +1,5 @@
+--- START OF FILE code.txt (base) ---
+
 <!DOCTYPE html>
 <html lang="pt-br">
   <head>
@@ -256,7 +258,7 @@
         /* Make cards less tall and avoid clipping on small screens */
         .card {
           border-radius: 14px;
-          box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
         }
 
         .card-body {
@@ -438,6 +440,57 @@
         padding: 1rem;
         margin: 1rem 0;
         text-align: center;
+      }
+
+      /* NOVO: Responsividade para Tabelas em telas pequenas (e.g., max-width: 600px) */
+      @media (max-width: 600px) {
+        .table thead {
+          /* Esconde o cabeçalho original da tabela, pois será recriado nas células */
+          border: none;
+          clip: rect(0 0 0 0);
+          height: 1px;
+          margin: -1px;
+          overflow: hidden;
+          padding: 0;
+          position: absolute;
+          width: 1px;
+        }
+
+        .table tr {
+          /* Faz a linha da tabela ser um bloco, separando cada item */
+          border: 1px solid var(--border);
+          display: block;
+          margin-bottom: 1rem;
+          border-radius: 10px;
+          background: white; /* Para destacar */
+        }
+
+        .table td {
+          /* Faz a célula ser um bloco */
+          border-bottom: 1px solid var(--border);
+          display: block;
+          text-align: right;
+          padding: 0.75rem 1rem;
+          font-size: 0.95rem;
+        }
+
+        .table td:last-child {
+          /* Remove a borda da última célula */
+          border-bottom: 0;
+        }
+
+        .table td::before {
+          /* Exibe o rótulo do cabeçalho como um 'label' flutuante à esquerda */
+          content: attr(data-label);
+          float: left;
+          font-weight: 600;
+          color: var(--dark);
+          margin-right: 1rem;
+        }
+
+        .table td:empty {
+          display: none; /* Esconde células vazias */
+        }
       }
     </style>
   </head>

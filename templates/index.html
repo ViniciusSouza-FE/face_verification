@@ -1,4 +1,5 @@
-{% extends "base.html" %} {% block content %}
+--- START OF FILE code.txt (index) --- {% extends "base.html" %} {% block
+content %}
 <div class="card">
   <div class="card-header">
     <h1><i class="fas fa-user-check"></i> Confirmação Facial</h1>
@@ -81,11 +82,27 @@
           <i class="fas fa-camera"></i> Abrir Câmera
         </button>
         <!-- Mobile-friendly camera input: opens native camera overlay on mobile devices -->
-        <input type="file" id="mobileCameraInput" accept="image/*" capture="environment" style="display:none" />
+        <input
+          type="file"
+          id="mobileCameraInput"
+          accept="image/*"
+          capture="environment"
+          style="display: none"
+        />
 
         <div class="camera-container" id="cameraContainer">
           <video id="video" autoplay playsinline></video>
-          <img id="cameraPreviewImg" alt="Preview da foto" style="display:none; width:100%; max-width:420px; margin-top:1rem; border-radius:12px;" />
+          <img
+            id="cameraPreviewImg"
+            alt="Preview da foto"
+            style="
+              display: none;
+              width: 100%;
+              max-width: 420px;
+              margin-top: 1rem;
+              border-radius: 12px;
+            "
+          />
           <div
             style="
               margin-top: 1rem;
@@ -95,10 +112,19 @@
               flex-wrap: wrap;
             "
           >
-            <button class="btn btn-success" id="captureBtn" onclick="capturePhoto()">
+            <button
+              class="btn btn-success"
+              id="captureBtn"
+              onclick="capturePhoto()"
+            >
               <i class="fas fa-camera"></i> Capturar Foto
             </button>
-            <button class="btn btn-primary" id="cameraConfirmBtn" style="display:none" onclick="confirmCameraUpload()">
+            <button
+              class="btn btn-primary"
+              id="cameraConfirmBtn"
+              style="display: none"
+              onclick="confirmCameraUpload()"
+            >
               <i class="fas fa-check"></i> Confirmar Identidade
             </button>
             <button class="btn btn-secondary" onclick="stopCamera()">
@@ -121,14 +147,19 @@
       <div id="resultPerson" style="margin: 1rem 0"></div>
       <div class="confidence-info">
         <p>
-          <strong>Confiança:</strong> 
+          <strong>Confiança:</strong>
           <span id="resultConfidence"></span>
-          <span class="confidence-indicator" style="margin-left: 10px; font-size: 0.9em;">
+          <span
+            class="confidence-indicator"
+            style="margin-left: 10px; font-size: 0.9em"
+          >
             (Alta: ≥80% | Média: 60-79% | Baixa: <60%)
           </span>
         </p>
-        <p id="similarityWarning" style="margin-top: 0.5rem; font-weight: bold;">
-        </p>
+        <p
+          id="similarityWarning"
+          style="margin-top: 0.5rem; font-weight: bold"
+        ></p>
       </div>
     </div>
 
@@ -152,8 +183,8 @@
         max-width: 420px;
         object-fit: cover;
         border-radius: 12px;
-        display:block;
-        margin:0 auto;
+        display: block;
+        margin: 0 auto;
         max-height: 60vh;
       }
       .result-container {
@@ -203,7 +234,7 @@
   async function startCamera() {
     // Em dispositivos mobile, use o input file com capture para abrir a câmera nativa (overlay)
     if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-      const mobileInput = document.getElementById('mobileCameraInput');
+      const mobileInput = document.getElementById("mobileCameraInput");
       mobileInput.value = null;
       mobileInput.click();
       return;
@@ -246,19 +277,23 @@
     lastCapturedDataUrl = imageData;
 
     // Mostrar preview
-    const previewImg = document.getElementById('cameraPreviewImg');
+    const previewImg = document.getElementById("cameraPreviewImg");
     previewImg.src = imageData;
-    previewImg.style.display = 'block';
+    previewImg.style.display = "block";
 
     // Mostrar botão de confirmar
-    document.getElementById('cameraConfirmBtn').style.display = 'inline-flex';
+    document.getElementById("cameraConfirmBtn").style.display = "inline-flex";
     // Opcional: esconder o vídeo para foco na foto
     // video.style.display = 'none';
   }
 
   // Envia a captura confirmada para reconhecimento
   async function confirmCameraUpload() {
-    const documento = (document.getElementById('documentoCamera').value || document.getElementById('documentoUpload').value || '').trim();
+    const documento = (
+      document.getElementById("documentoCamera").value ||
+      document.getElementById("documentoUpload").value ||
+      ""
+    ).trim();
     if (!documento) {
       showError("Por favor, informe o número do documento");
       return;
@@ -271,19 +306,19 @@
       try {
         await processUpload();
       } catch (error) {
-        showError('Erro ao enviar a foto: ' + error.message);
+        showError("Erro ao enviar a foto: " + error.message);
       } finally {
         hideLoading(cameraLoading);
         stopCamera();
-        const previewImg = document.getElementById('cameraPreviewImg');
-        if (previewImg) previewImg.style.display = 'none';
-        document.getElementById('cameraConfirmBtn').style.display = 'none';
+        const previewImg = document.getElementById("cameraPreviewImg");
+        if (previewImg) previewImg.style.display = "none";
+        document.getElementById("cameraConfirmBtn").style.display = "none";
       }
       return;
     }
 
     if (!lastCapturedDataUrl) {
-      showError('Nenhuma foto capturada.');
+      showError("Nenhuma foto capturada.");
       return;
     }
 
@@ -294,7 +329,7 @@
       // Converter dataURL para blob/file e usar o mesmo endpoint de upload para consistência
       const res = await fetch(lastCapturedDataUrl);
       const blob = await res.blob();
-      const file = new File([blob], 'camera.jpg', { type: blob.type });
+      const file = new File([blob], "camera.jpg", { type: blob.type });
 
       const dataTransfer = new DataTransfer();
       dataTransfer.items.add(file);
@@ -303,15 +338,15 @@
       // chamamos processUpload que detecta ambos campos de documento
       await processUpload();
     } catch (error) {
-      showError('Erro ao enviar a foto: ' + error.message);
+      showError("Erro ao enviar a foto: " + error.message);
     } finally {
       hideLoading(cameraLoading);
       stopCamera();
       // reset preview and lastCaptured
       lastCapturedDataUrl = null;
-      const previewImg = document.getElementById('cameraPreviewImg');
-      if (previewImg) previewImg.style.display = 'none';
-      document.getElementById('cameraConfirmBtn').style.display = 'none';
+      const previewImg = document.getElementById("cameraPreviewImg");
+      if (previewImg) previewImg.style.display = "none";
+      document.getElementById("cameraConfirmBtn").style.display = "none";
     }
   }
 
@@ -319,7 +354,11 @@
   async function processUpload() {
     const file = fileInput.files[0];
     // tenta obter documento dos dois campos (upload ou camera)
-    const documento = (document.getElementById('documentoUpload').value || document.getElementById('documentoCamera').value || '').trim();
+    const documento = (
+      document.getElementById("documentoUpload").value ||
+      document.getElementById("documentoCamera").value ||
+      ""
+    ).trim();
 
     if (!documento) {
       showError("Por favor, informe o número do documento");
@@ -359,7 +398,7 @@
     } else if (result.success) {
       const confidence = result.confidence;
       let message, color, bgColor;
-      
+
       if (confidence >= 80) {
         message = "Alta similaridade detectada!";
         color = "#28a745"; // Verde
@@ -373,14 +412,28 @@
         color = "#dc3545"; // Vermelho
         bgColor = "#f8d7da";
       }
-      
-      showResult(message, confidence, result.person, confidence < 60, color, bgColor);
+
+      showResult(
+        message,
+        confidence,
+        result.person,
+        confidence < 60,
+        color,
+        bgColor
+      );
     } else {
       showError(result.message || "Pessoa não identificrada na base de dados");
     }
   }
 
-  function showResult(message, confidence, person, isLowSimilarity, color, bgColor) {
+  function showResult(
+    message,
+    confidence,
+    person,
+    isLowSimilarity,
+    color,
+    bgColor
+  ) {
     const resultContainer = document.getElementById("resultContainer");
     const errorContainer = document.getElementById("errorContainer");
     const resultTitle = document.getElementById("resultTitle");
@@ -391,16 +444,30 @@
 
     resultTitle.textContent = message;
     resultTitle.style.color = color;
-    
+
     // Informações da pessoa
     resultPerson.innerHTML = `
       <p><strong>Nome:</strong> ${person.nome}</p>
-      ${person.email ? `<p><strong>Email:</strong> ${person.email}</p>` : ''}
-      ${person.telefone ? `<p><strong>Telefone:</strong> ${person.telefone}</p>` : ''}
+      ${person.email ? `<p><strong>Email:</strong> ${person.email}</p>` : ""}
+      ${
+        person.telefone
+          ? `<p><strong>Telefone:</strong> ${person.telefone}</p>`
+          : ""
+      }
     `;
-    
-    resultConfidence.textContent = confidence.toFixed(1) + '%';
-    similarityWarning.style.display = isLowSimilarity ? "block" : "none";
+
+    resultConfidence.textContent = confidence.toFixed(1) + "%";
+
+    // Aprimoramento da mensagem de aviso de similaridade
+    if (isLowSimilarity) {
+      similarityWarning.textContent =
+        "⚠️ Baixa similaridade: Recomenda-se uma segunda verificação ou foto com melhor qualidade.";
+      similarityWarning.style.color = color; // Cor de aviso para destacar
+      similarityWarning.style.display = "block";
+    } else {
+      similarityWarning.textContent = "";
+      similarityWarning.style.display = "none";
+    }
 
     // Aplica cor de fundo ao container de resultados
     resultContainer.style.backgroundColor = bgColor;
@@ -414,7 +481,10 @@
     if (this.files[0]) {
       const fileName = this.files[0].name;
       // truncate long file names for display
-      const truncated = fileName.length > 40 ? fileName.slice(0, 20) + '...' + fileName.slice(-15) : fileName;
+      const truncated =
+        fileName.length > 40
+          ? fileName.slice(0, 20) + "..." + fileName.slice(-15)
+          : fileName;
       document.querySelector(
         ".file-input p"
       ).innerHTML = `Arquivo selecionado: <span class="file-name">${truncated}</span>`;
@@ -423,9 +493,9 @@
   });
 
   // Mobile camera input (native overlay) -> show preview and require confirmation before sending
-  const mobileCameraInput = document.getElementById('mobileCameraInput');
+  const mobileCameraInput = document.getElementById("mobileCameraInput");
   if (mobileCameraInput) {
-    mobileCameraInput.addEventListener('change', function() {
+    mobileCameraInput.addEventListener("change", function () {
       if (this.files && this.files[0]) {
         // coloca no fileInput para reuso
         const dataTransfer = new DataTransfer();
@@ -434,22 +504,30 @@
 
         // mostrar preview da imagem e botão de confirmar
         const reader = new FileReader();
-        reader.onload = function(e) {
-          const previewImg = document.getElementById('cameraPreviewImg');
+        reader.onload = function (e) {
+          const previewImg = document.getElementById("cameraPreviewImg");
           previewImg.src = e.target.result;
-          previewImg.style.display = 'block';
-          document.getElementById('cameraConfirmBtn').style.display = 'inline-flex';
+          previewImg.style.display = "block";
+          document.getElementById("cameraConfirmBtn").style.display =
+            "inline-flex";
           // Garantir que o container da câmera esteja visível em mobile
-          const camContainer = document.getElementById('cameraContainer');
-          if (camContainer) camContainer.style.display = 'block';
+          const camContainer = document.getElementById("cameraContainer");
+          if (camContainer) camContainer.style.display = "block";
           // Rolar para o preview em telas pequenas
-          try { previewImg.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+          try {
+            previewImg.scrollIntoView({ behavior: "smooth", block: "center" });
+          } catch (e) {}
         };
         reader.readAsDataURL(this.files[0]);
 
-  const fileName = this.files[0].name;
-  const truncated = fileName.length > 40 ? fileName.slice(0, 20) + '...' + fileName.slice(-15) : fileName;
-  document.querySelector('.file-input p').innerHTML = `Foto capturada: <span class="file-name">${truncated}</span>`;
+        const fileName = this.files[0].name;
+        const truncated =
+          fileName.length > 40
+            ? fileName.slice(0, 20) + "..." + fileName.slice(-15)
+            : fileName;
+        document.querySelector(
+          ".file-input p"
+        ).innerHTML = `Foto capturada: <span class="file-name">${truncated}</span>`;
         hideResults();
       }
     });

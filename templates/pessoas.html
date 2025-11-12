@@ -1,4 +1,5 @@
-{% extends "base.html" %} {% block content %}
+--- START OF FILE code.txt (pessoas) --- {% extends "base.html" %} {% block
+content %}
 <div class="card">
   <div class="card-header">
     <h1><i class="fas fa-users"></i> Pessoas Cadastradas</h1>
@@ -81,10 +82,10 @@
         pessoas.forEach((pessoa) => {
           const row = document.createElement("tr");
           row.innerHTML = `
-                        <td>
+                        <td data-label="Nome">
                             <strong>${pessoa.nome}</strong>
                         </td>
-                        <td>
+                        <td data-label="Contato">
                             ${
                               pessoa.email
                                 ? `<div><i class="fas fa-envelope"></i> ${pessoa.email}</div>`
@@ -96,12 +97,12 @@
                                 : ""
                             }
                         </td>
-                        <td>
+                        <td data-label="Data de Cadastro">
                             ${new Date(pessoa.data_cadastro).toLocaleDateString(
                               "pt-BR"
                             )}
                         </td>
-                        <td>
+                        <td data-label="Ações">
                             <button class="btn btn-danger" onclick="deletarPessoa(${
                               pessoa.id
                             }, '${pessoa.nome}')">
