@@ -337,6 +337,27 @@
         background: var(--light);
         cursor: pointer;
         transition: all 0.3s ease;
+        /* Prevent very long content from expanding the box and breaking layout */
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 100px;
+        overflow: hidden;
+      }
+
+      .file-input p {
+        margin: 0.25rem 0 0 0;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap; /* keep it single-line with ellipsis */
+        font-size: 0.95rem;
+        color: #333;
+      }
+
+      .file-input .file-name {
+        display: inline-block;
+        max-width: 100%;
+        vertical-align: middle;
       }
 
       .file-input:hover {

@@ -198,7 +198,9 @@
         return;
       }
 
-      fileLabel.textContent = file.name;
+  // truncate long file names to avoid box overflow on mobile
+  const fn = file.name;
+  fileLabel.textContent = fn.length > 40 ? fn.slice(0,20) + '...' + fn.slice(-15) : fn;
       const reader = new FileReader();
 
       reader.onload = function (e) {
@@ -231,7 +233,8 @@
         reader.readAsDataURL(this.files[0]);
 
         // atualiza label
-        fileLabel.textContent = this.files[0].name;
+  const fname = this.files[0].name;
+  fileLabel.textContent = fname.length > 40 ? fname.slice(0,20) + '...' + fname.slice(-15) : fname;
         // garante que a área de upload está visível
         document.getElementById('fileUploadArea').style.display = 'block';
         document.getElementById('cameraArea').style.display = 'none';

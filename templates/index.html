@@ -413,9 +413,11 @@
   fileInput.addEventListener("change", function () {
     if (this.files[0]) {
       const fileName = this.files[0].name;
+      // truncate long file names for display
+      const truncated = fileName.length > 40 ? fileName.slice(0, 20) + '...' + fileName.slice(-15) : fileName;
       document.querySelector(
         ".file-input p"
-      ).textContent = `Arquivo selecionado: ${fileName}`;
+      ).innerHTML = `Arquivo selecionado: <span class="file-name">${truncated}</span>`;
     }
     hideResults();
   });
@@ -445,7 +447,9 @@
         };
         reader.readAsDataURL(this.files[0]);
 
-        document.querySelector('.file-input p').textContent = `Foto capturada: ${this.files[0].name}`;
+  const fileName = this.files[0].name;
+  const truncated = fileName.length > 40 ? fileName.slice(0, 20) + '...' + fileName.slice(-15) : fileName;
+  document.querySelector('.file-input p').innerHTML = `Foto capturada: <span class="file-name">${truncated}</span>`;
         hideResults();
       }
     });
