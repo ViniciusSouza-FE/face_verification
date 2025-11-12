@@ -236,6 +236,46 @@ def optimize_image_for_recognition(image):
         print(f"⚠️ Erro ao otimizar imagem: {e}")
         return image
 
+def optimize_image_for_mobile(image):
+    """
+    Otimização específica para imagens de dispositivos móveis
+    """
+    try:
+        # Converte para RGB se necessário
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+        
+        width, height = image.size
+        print(f"📱 Processando imagem mobile: {width}x{height}")
+        
+        # Para mobile, mantemos resolução mais alta para melhor detecção
+        max_size = 1200  # Aumentado para mobile
+        min_size = 400
+        
+        # Apenas redimensiona se for muito grande
+        if width > max_size or height > max_size:
+            if width > height:
+                new_width = max_size
+                new_height = int((height / width) * max_size)
+            else:
+                new_height = max_size
+                new_width = int((width / height) * max_size)
+            
+            # Garante tamanho mínimo
+            if new_width < min_size or new_height < min_size:
+                scale_factor = max(min_size / new_width, min_size / new_height)
+                new_width = int(new_width * scale_factor)
+                new_height = int(new_height * scale_factor)
+            
+            print(f"🔄 Redimensionando imagem mobile para {new_width}x{new_height}")
+            image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+        return image
+        
+    except Exception as e:
+        print(f"⚠️ Erro ao otimizar imagem mobile: {e}")
+        return image
+
 def extract_embedding_optimized(image_path):
     if not DEEPFACE_AVAILABLE:
         print("❌ DeepFace não está disponível para extrair embedding.")
@@ -275,6 +315,56 @@ def extract_embedding_optimized(image_path):
         
     except Exception as e:
         print(f"❌ Erro crítico no DeepFace durante a extração: {e}")
+        return None
+
+def extract_embedding_mobile_optimized(image_path):
+    """
+    Extração de embedding otimizada para dispositivos móveis
+    """
+    if not DEEPFACE_AVAILABLE:
+        print("❌ DeepFace não está disponível para extrair embedding.")
+        return None
+        
+    try:
+        print("📱 Extraindo embedding facial (otimizado para mobile)...")
+        
+        # Tenta diferentes configurações para mobile
+        configs = [
+            {'detector_backend': 'opencv', 'enforce_detection': True},
+            {'detector_backend': 'ssd', 'enforce_detection': True},
+            {'detector_backend': 'mtcnn', 'enforce_detection': True},
+            {'detector_backend': 'opencv', 'enforce_detection': False},  # Última tentativa sem enforcement
+        ]
+        
+        for config in configs:
+            try:
+                print(f"🔍 Tentando detector: {config['detector_backend']} (enforce: {config['enforce_detection']})")
+                embedding_objs = DeepFace.represent(
+                    img_path=image_path, 
+                    model_name="Facenet", 
+                    detector_backend=config['detector_backend'],
+                    enforce_detection=config['enforce_detection'], 
+                    align=True, 
+                    normalization="base"
+                )
+                
+                if embedding_objs and len(embedding_objs) > 0:
+                    embedding_array = np.array(embedding_objs[0]['embedding'], dtype=np.float32)
+                    norm = np.linalg.norm(embedding_array)
+                    if norm > 0: 
+                        embedding_array /= norm
+                    print(f"✅ Embedding extraído com {config['detector_backend']}")
+                    return pickle.dumps(embedding_array, protocol=4)
+                    
+            except Exception as e:
+                print(f"⚠️ Config {config['detector_backend']} falhou: {e}")
+                continue
+        
+        print("❌ Nenhum rosto detectado na imagem mobile.")
+        return None
+        
+    except Exception as e:
+        print(f"❌ Erro crítico na extração mobile: {e}")
         return None
 
 def emergency_fallback(reason=""):
@@ -393,6 +483,116 @@ def facial_recognition_from_embedding(image_path, documento=None):
         print(f"❌ Erro inesperado durante o reconhecimento facial: {e}")
         return emergency_fallback(f"Exceção: {e}")
 
+def facial_recognition_from_embedding_mobile(image_path, documento=None):
+    """
+    Versão otimizada para reconhecimento em dispositivos móveis
+    """
+    if not DEEPFACE_AVAILABLE:
+        return emergency_fallback("DeepFace não foi inicializado.")
+
+    try:
+        input_embedding_data = extract_embedding_mobile_optimized(image_path)
+        if input_embedding_data is None:
+            return {"success": False, "message": "Não foi possível detectar um rosto na imagem. Certifique-se de que o rosto está visível, bem iluminado e centralizado."}
+
+        input_array = safe_pickle_loads(input_embedding_data)
+        if input_array is None:
+            return {"error": "Erro ao processar as características faciais da imagem."}
+
+        conn = get_db_connection()
+        if not conn: return {"error": "Erro de conexão com o banco de dados."}
+
+        cursor = conn.cursor()
+        
+        if not documento:
+            return {"success": False, "message": "Número do documento é obrigatório para a verificação."}
+
+        cursor.execute('SELECT id, nome, email, telefone, documento, embedding FROM pessoas WHERE ativo = true AND documento = %s', (documento,))
+        pessoa = cursor.fetchone()
+        conn.close()
+
+        if not pessoa:
+            return {"success": False, "message": "Nenhuma pessoa encontrada com este número de documento."}
+
+        if not pessoa[5]:
+            return {
+                "success": True,
+                "person": {
+                    "id": int(pessoa[0]),
+                    "nome": str(pessoa[1]),
+                    "email": str(pessoa[2]) if pessoa[2] else None,
+                    "telefone": str(pessoa[3]) if pessoa[3] else None,
+                    "documento": str(pessoa[4])
+                },
+                "confidence": 0.0,
+                "warning": True,
+                "message": "Pessoa encontrada, mas não possui foto cadastrada para comparação."
+            }
+
+        print(f"📱 Comparando mobile com documento {documento}")
+        
+        try:
+            db_array = safe_pickle_loads(pessoa[5])
+            if db_array is None:
+                return {
+                    "success": True,
+                    "person": {
+                        "id": int(pessoa[0]),
+                        "nome": str(pessoa[1]),
+                        "email": str(pessoa[2]) if pessoa[2] else None,
+                        "telefone": str(pessoa[3]) if pessoa[3] else None,
+                        "documento": str(pessoa[4])
+                    },
+                    "confidence": 0.0,
+                    "warning": True,
+                    "message": "Erro ao processar a foto cadastrada desta pessoa."
+                }
+            
+            similarity = cosine_similarity(input_array, db_array)
+            confidence = similarity * 100
+
+            print(f"👤 Comparação mobile com {pessoa[1]}: {confidence:.2f}% de similaridade")
+            
+            # Ajuste de sensibilidade para mobile - mais tolerante
+            is_low_confidence = float(confidence) < 55  # Reduzido de 60 para 55
+            status_message = "⚠️ AVISO: Baixa similaridade" if is_low_confidence else "✅ Similaridade aceitável"
+            print(f"{status_message} (mobile): {pessoa[1]} com {confidence:.2f}% de confiança")
+            
+            result = {
+                "success": True,
+                "person": {
+                    "id": int(pessoa[0]),
+                    "nome": str(pessoa[1]),
+                    "email": str(pessoa[2]) if pessoa[2] else None,
+                    "telefone": str(pessoa[3]) if pessoa[3] else None,
+                    "documento": str(pessoa[4])
+                },
+                "confidence": float(confidence),
+                "warning": bool(is_low_confidence),
+                "message": "Baixa similaridade detectada" if is_low_confidence else "Similaridade dentro do esperado"
+            }
+            return result
+            
+        except Exception as e:
+            print(f"⚠️ Erro ao comparar faces mobile: {e}")
+            return {
+                "success": True,
+                "person": {
+                    "id": int(pessoa[0]),
+                    "nome": str(pessoa[1]),
+                    "email": str(pessoa[2]) if pessoa[2] else None,
+                    "telefone": str(pessoa[3]) if pessoa[3] else None,
+                    "documento": str(pessoa[4])
+                },
+                "confidence": 0.0,
+                "warning": True,
+                "message": f"Erro técnico na comparação: {str(e)}"
+            }
+
+    except Exception as e:
+        print(f"❌ Erro inesperado durante o reconhecimento facial mobile: {e}")
+        return emergency_fallback(f"Exceção mobile: {e}")
+
 def cosine_similarity(a, b):
     try:
         dot_product = np.dot(a, b)
@@ -433,8 +633,15 @@ def pessoas():
         if not conn:
             return render_template('pessoas.html', pessoas=[], error="Erro de conexão com o banco")
         cursor = conn.cursor()
-        cursor.execute('SELECT id, nome, email, telefone, data_cadastro FROM pessoas WHERE ativo = true ORDER BY nome')
-        pessoas_data = [{'id': row[0], 'nome': row[1], 'email': row[2], 'telefone': row[3], 'data_cadastro': row[4]} for row in cursor.fetchall()]
+        cursor.execute('SELECT id, nome, email, telefone, documento, data_cadastro FROM pessoas WHERE ativo = true ORDER BY nome')
+        pessoas_data = [{
+            'id': row[0], 
+            'nome': row[1], 
+            'email': row[2], 
+            'telefone': row[3], 
+            'documento': row[4], 
+            'data_cadastro': row[5]
+        } for row in cursor.fetchall()]
         conn.close()
         return render_template('pessoas.html', pessoas=pessoas_data)
     except Exception as e:
@@ -475,40 +682,75 @@ def cadastrar_pessoa():
         if not file or not allowed_file(file.filename):
             return jsonify({"error": "Arquivo inválido ou não selecionado."})
 
-        # Verifica se já existe pessoa com o mesmo documento
         conn = get_db_connection()
         if not conn: return jsonify({"error": "Erro de conexão com o banco"})
         cursor = conn.cursor()
+        
+        # Verifica se já existe pessoa ATIVA com o mesmo documento
         cursor.execute('SELECT id FROM pessoas WHERE documento = %s AND ativo = true', (documento,))
         if cursor.fetchone():
+            conn.close()
             return jsonify({"error": "Já existe uma pessoa cadastrada com este número de documento."})
 
-        image = Image.open(file.stream)
+        # Se existe pessoa INATIVA com o mesmo documento, reativa em vez de criar nova
+        cursor.execute('SELECT id, nome FROM pessoas WHERE documento = %s AND ativo = false', (documento,))
+        pessoa_existente = cursor.fetchone()
         
-        # OTIMIZAÇÃO: Usa função melhorada de otimização
-        image = optimize_image_for_recognition(image)
-        
-        temp_filename = f"temp_{uuid.uuid4().hex}.jpg"
-        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], temp_filename)
-        
-        # Qualidade maior para preservar detalhes faciais
-        image.save(temp_path, 'JPEG', quality=92, optimize=True)
+        if pessoa_existente:
+            # Reativa a pessoa existente
+            pessoa_id = pessoa_existente[0]
+            nome_antigo = pessoa_existente[1]
+            print(f"🔄 Reativando pessoa ID {pessoa_id} (documento: {documento})")
+            
+            # Processa a imagem
+            image = Image.open(file.stream)
+            image = optimize_image_for_recognition(image)
+            
+            temp_filename = f"temp_{uuid.uuid4().hex}.jpg"
+            temp_path = os.path.join(app.config['UPLOAD_FOLDER'], temp_filename)
+            image.save(temp_path, 'JPEG', quality=92, optimize=True)
 
-        embedding = extract_embedding_optimized(temp_path)
-        os.remove(temp_path)
+            embedding = extract_embedding_optimized(temp_path)
+            os.remove(temp_path)
 
-        if embedding is None:
-            return jsonify({"error": "Não foi possível detectar um rosto na foto. Tente uma imagem mais nítida e bem iluminada."})
-        
-        cursor.execute(
-            'INSERT INTO pessoas (nome, email, telefone, documento, embedding) VALUES (%s, %s, %s, %s, %s) RETURNING id',
-            (nome, request.form.get('email', ''), request.form.get('telefone', ''), documento, embedding)
-        )
-        pessoa_id = cursor.fetchone()[0]
-        conn.commit()
-        conn.close()
+            if embedding is None:
+                conn.close()
+                return jsonify({"error": "Não foi possível detectar um rosto na foto. Tente uma imagem mais nítida e bem iluminada."})
+            
+            # Atualiza os dados da pessoa existente
+            cursor.execute(
+                'UPDATE pessoas SET nome = %s, email = %s, telefone = %s, embedding = %s, ativo = true, data_cadastro = CURRENT_TIMESTAMP WHERE id = %s',
+                (nome, request.form.get('email', ''), request.form.get('telefone', ''), embedding, pessoa_id)
+            )
+            conn.commit()
+            conn.close()
 
-        return jsonify({"success": True, "message": f"Pessoa {nome} cadastrada com sucesso!", "pessoa_id": pessoa_id})
+            return jsonify({"success": True, "message": f"Pessoa reativada com sucesso! (Substituiu: {nome_antigo})", "pessoa_id": pessoa_id})
+        else:
+            # Cria nova pessoa
+            image = Image.open(file.stream)
+            image = optimize_image_for_recognition(image)
+            
+            temp_filename = f"temp_{uuid.uuid4().hex}.jpg"
+            temp_path = os.path.join(app.config['UPLOAD_FOLDER'], temp_filename)
+            image.save(temp_path, 'JPEG', quality=92, optimize=True)
+
+            embedding = extract_embedding_optimized(temp_path)
+            os.remove(temp_path)
+
+            if embedding is None:
+                conn.close()
+                return jsonify({"error": "Não foi possível detectar um rosto na foto. Tente uma imagem mais nítida e bem iluminada."})
+            
+            cursor.execute(
+                'INSERT INTO pessoas (nome, email, telefone, documento, embedding) VALUES (%s, %s, %s, %s, %s) RETURNING id',
+                (nome, request.form.get('email', ''), request.form.get('telefone', ''), documento, embedding)
+            )
+            pessoa_id = cursor.fetchone()[0]
+            conn.commit()
+            conn.close()
+
+            return jsonify({"success": True, "message": f"Pessoa {nome} cadastrada com sucesso!", "pessoa_id": pessoa_id})
 
     except Exception as e:
         print(f"❌ Erro no cadastro: {e}")
@@ -527,20 +769,34 @@ def recognize_upload():
 
         image = Image.open(file.stream)
         
-        # OTIMIZAÇÃO: Usa a mesma função de otimização
-        image = optimize_image_for_recognition(image)
+        # Detecta se é mobile pela resolução ou user agent
+        user_agent = request.headers.get('User-Agent', '')
+        is_mobile = 'Mobile' in user_agent or 'Android' in user_agent or 'iPhone' in user_agent
+        
+        if is_mobile:
+            print("📱 Detectado dispositivo mobile - usando otimização específica")
+            image = optimize_image_for_mobile(image)
+        else:
+            image = optimize_image_for_recognition(image)
         
         filename = f"{uuid.uuid4().hex}.jpg"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         
-        # Qualidade maior para preservar detalhes faciais
-        image.save(filepath, 'JPEG', quality=92, optimize=True)
+        # Qualidade maior para mobile
+        quality = 95 if is_mobile else 92
+        image.save(filepath, 'JPEG', quality=quality, optimize=True)
 
-        result = facial_recognition_from_embedding(filepath, documento)
+        # Usa extração otimizada para mobile se detectado
+        if is_mobile:
+            result = facial_recognition_from_embedding_mobile(filepath, documento)
+        else:
+            result = facial_recognition_from_embedding(filepath, documento)
+            
         os.remove(filepath)
         
         if result.get('success'):
-            save_recognition_log(result['person']['id'], 'upload', result['confidence'])
+            metodo = 'mobile_upload' if is_mobile else 'upload'
+            save_recognition_log(result['person']['id'], metodo, result['confidence'])
             
         return jsonify(result)
 
@@ -557,20 +813,34 @@ def recognize_camera():
 
         image = base64_to_image(data['image'])
         
-        # OTIMIZAÇÃO: Usa a mesma função de otimização
-        image = optimize_image_for_recognition(image)
+        # Detecta se é mobile pela resolução
+        width, height = image.size
+        is_mobile = width > 1000 or height > 1000  # Imagens grandes geralmente são de mobile
+        
+        if is_mobile:
+            print("📱 Detectado dispositivo mobile - usando otimização específica")
+            image = optimize_image_for_mobile(image)
+        else:
+            image = optimize_image_for_recognition(image)
         
         filename = f"{uuid.uuid4().hex}.jpg"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         
-        # Qualidade maior para preservar detalhes faciais
-        image.save(filepath, 'JPEG', quality=92, optimize=True)
+        # Qualidade maior para mobile
+        quality = 95 if is_mobile else 92
+        image.save(filepath, 'JPEG', quality=quality, optimize=True)
 
-        result = facial_recognition_from_embedding(filepath, data['documento'])
+        # Usa extração otimizada para mobile se detectado
+        if is_mobile:
+            result = facial_recognition_from_embedding_mobile(filepath, data['documento'])
+        else:
+            result = facial_recognition_from_embedding(filepath, data['documento'])
+            
         os.remove(filepath)
         
         if result.get('success'):
-            save_recognition_log(result['person']['id'], 'camera', result['confidence'])
+            metodo = 'mobile_camera' if is_mobile else 'camera'
+            save_recognition_log(result['person']['id'], metodo, result['confidence'])
 
         return jsonify(result)
 
@@ -584,8 +854,15 @@ def api_pessoas():
         conn = get_db_connection()
         if not conn: return jsonify([])
         cursor = conn.cursor()
-        cursor.execute('SELECT id, nome, email, telefone, data_cadastro FROM pessoas WHERE ativo = true ORDER BY nome')
-        pessoas = [{'id': row[0], 'nome': row[1], 'email': row[2], 'telefone': row[3], 'data_cadastro': row[4].strftime('%Y-%m-%d %H:%M:%S')} for row in cursor.fetchall()]
+        cursor.execute('SELECT id, nome, email, telefone, documento, data_cadastro FROM pessoas WHERE ativo = true ORDER BY nome')
+        pessoas = [{
+            'id': row[0], 
+            'nome': row[1], 
+            'email': row[2], 
+            'telefone': row[3], 
+            'documento': row[4], 
+            'data_cadastro': row[5].strftime('%Y-%m-%d %H:%M:%S')
+        } for row in cursor.fetchall()]
         conn.close()
         return jsonify(pessoas)
     except Exception as e:

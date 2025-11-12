@@ -425,7 +425,7 @@
         bgColor
       );
     } else {
-      showError(result.message || "Pessoa não identificrada na base de dados");
+      showError(result.message || "Pessoa não identificada na base de dados");
     }
   }
 
@@ -459,8 +459,34 @@
       }
     `;
 
-    resultConfidence.textContent = confidence.toFixed(1) + "%";
+    // Formata a confiança para 1 casa decimal
+    const confidenceFormatted = confidence.toFixed(1);
+
+    // Define o ícone e a cor de acordo com a confiança
+    let icon = "";
+    let confidenceColor = "";
+    if (confidence >= 80) {
+      icon = "✓";
+      confidenceColor = "#28a745"; // Verde mais vibrante
+    } else if (confidence >= 60) {
+      icon = "⚠";
+      confidenceColor = "#ffc107"; // Amarelo
+    } else {
+      icon = "✗";
+      confidenceColor = "#dc3545"; // Vermelho
+    }
+
+    resultConfidence.innerHTML = `
+        <span style="color: ${confidenceColor}; font-weight: bold; font-size: 1.1em;">
+            ${confidenceFormatted}% 
+            <span style="margin-left: 8px; font-size: 1.2em;">${icon}</span>
+        </span>
+    `;
+
     similarityWarning.style.display = isLowSimilarity ? "block" : "none";
+    similarityWarning.textContent = isLowSimilarity
+      ? "⚠️ Atenção: Similaridade abaixo do ideal. Recomenda-se verificação adicional."
+      : "";
 
     // Aplica cor de fundo ao container de resultados
     resultContainer.style.backgroundColor = bgColor;
@@ -524,6 +550,35 @@
         hideResults();
       }
     });
+  }
+
+  // Funções utilitárias globais (caso não estejam no base.html)
+  function showLoading(loadingElement) {
+    if (loadingElement) loadingElement.style.display = "block";
+  }
+
+  function hideLoading(loadingElement) {
+    if (loadingElement) loadingElement.style.display = "none";
+  }
+
+  function showError(message) {
+    const errorContainer = document.getElementById("errorContainer");
+    const errorMessage = document.getElementById("errorMessage");
+    if (errorContainer && errorMessage) {
+      errorMessage.textContent = message;
+      errorContainer.style.display = "block";
+      const resultContainer = document.getElementById("resultContainer");
+      if (resultContainer) resultContainer.style.display = "none";
+    } else {
+      alert("Erro: " + message);
+    }
+  }
+
+  function hideResults() {
+    const resultContainer = document.getElementById("resultContainer");
+    const errorContainer = document.getElementById("errorContainer");
+    if (resultContainer) resultContainer.style.display = "none";
+    if (errorContainer) errorContainer.style.display = "none";
   }
 </script>
 {% endblock %}

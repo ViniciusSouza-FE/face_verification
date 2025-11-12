@@ -28,6 +28,7 @@
           <thead>
             <tr>
               <th>Nome</th>
+              <th>Documento</th>
               <th>Contato</th>
               <th>Data de Cadastro</th>
               <th>Ações</th>
@@ -67,7 +68,7 @@
       if (pessoas.length === 0) {
         tableBody.innerHTML = `
           <tr>
-            <td colspan="4" style="text-align: center; padding: 2rem;">
+            <td colspan="5" style="text-align: center; padding: 2rem;">
               <i class="fas fa-users" style="font-size: 2.5rem; color: #6c757d; margin-bottom: 1rem;"></i>
               <p>Nenhuma pessoa cadastrada ainda.</p>
               <a href="{{ url_for('cadastro') }}" class="btn btn-primary" style="margin-top: 1rem; max-width: 250px;">
@@ -82,6 +83,11 @@
           row.innerHTML = `
             <td>
               <strong>${pessoa.nome}</strong>
+            </td>
+            <td>
+              <code style="background: #f8f9fa; padding: 0.25rem 0.5rem; border-radius: 4px; font-family: monospace;">${
+                pessoa.documento
+              }</code>
             </td>
             <td>
               ${
@@ -146,4 +152,22 @@
   // Carrega a lista quando a página é aberta
   document.addEventListener("DOMContentLoaded", loadPessoas);
 </script>
+
+<style>
+  @media (max-width: 768px) {
+    .table {
+      font-size: 0.8rem;
+    }
+
+    .table th,
+    .table td {
+      padding: 0.5rem 0.25rem;
+    }
+
+    .btn {
+      padding: 0.5rem 0.75rem;
+      font-size: 0.8rem;
+    }
+  }
+</style>
 {% endblock %}
