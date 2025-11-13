@@ -193,7 +193,7 @@ def safe_pickle_loads(data):
             except Exception as e:
                 print(f"❌ Erro final ao carregar pickle: {e}")
                 return None
-
+#-------------------------------------------------------------------------------------------------------------------------------
 def optimize_image_for_recognition(image):
     """
     Otimiza a imagem para reconhecimento facial mantendo qualidade adequada
@@ -235,7 +235,7 @@ def optimize_image_for_recognition(image):
     except Exception as e:
         print(f"⚠️ Erro ao otimizar imagem: {e}")
         return image
-
+#---------------------------------------------------------------------------------------------------------------------------
 def optimize_image_for_mobile(image):
     """
     Otimização específica para imagens de dispositivos móveis
@@ -276,6 +276,7 @@ def optimize_image_for_mobile(image):
         print(f"⚠️ Erro ao otimizar imagem mobile: {e}")
         return image
 
+#------------------------------------------------------------------------------------------------------------------------------------
 def extract_embedding_optimized(image_path):
     if not DEEPFACE_AVAILABLE:
         print("❌ DeepFace não está disponível para extrair embedding.")
@@ -316,7 +317,7 @@ def extract_embedding_optimized(image_path):
     except Exception as e:
         print(f"❌ Erro crítico no DeepFace durante a extração: {e}")
         return None
-
+#------------------------------------------------------------------------------------------------------------------------------------
 def extract_embedding_mobile_optimized(image_path):
     """
     Extração de embedding otimizada para dispositivos móveis
@@ -373,7 +374,7 @@ def emergency_fallback(reason=""):
         "error": "O serviço de reconhecimento facial não está disponível no momento. Verifique os logs do servidor.",
         "deepface_available": bool(DEEPFACE_AVAILABLE)
     }
-
+#------------------------------------------------------------------------------------------------------------------------------------
 def facial_recognition_from_embedding(image_path, documento=None):
     if not DEEPFACE_AVAILABLE:
         return emergency_fallback("DeepFace não foi inicializado.")
@@ -482,7 +483,7 @@ def facial_recognition_from_embedding(image_path, documento=None):
     except Exception as e:
         print(f"❌ Erro inesperado durante o reconhecimento facial: {e}")
         return emergency_fallback(f"Exceção: {e}")
-
+#------------------------------------------------------------------------------------------------------------------------------------
 def facial_recognition_from_embedding_mobile(image_path, documento=None):
     """
     Versão otimizada para reconhecimento em dispositivos móveis
@@ -592,7 +593,7 @@ def facial_recognition_from_embedding_mobile(image_path, documento=None):
     except Exception as e:
         print(f"❌ Erro inesperado durante o reconhecimento facial mobile: {e}")
         return emergency_fallback(f"Exceção mobile: {e}")
-
+#------------------------------------------------------------------------------------------------------------------------------------
 def cosine_similarity(a, b):
     try:
         dot_product = np.dot(a, b)
