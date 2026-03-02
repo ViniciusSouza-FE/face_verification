@@ -3,7 +3,7 @@
 Projeto desenvolvido para a disciplina de Projeto Interdisciplinar II, com o objetivo de criar um agente de Inteligência Artificial capaz de realizar o reconhecimento facial e confirmação de identidade.
 O sistema permite cadastrar pessoas com foto e posteriormente confirmar a identidade via upload de imagem ou câmera.
 
-#Tecnologias Utilizadas
+##Tecnologias Utilizadas
 # Backend
 - Python
 - Flask
@@ -27,14 +27,14 @@ O sistema permite cadastrar pessoas com foto e posteriormente confirmar a identi
 - DeepFace (extração de embeddings faciais)
 - TensorFlow (backend utilizado pelo DeepFace)
 
-#IA
+##IA
 O sistema utiliza a biblioteca `DeepFace` para:
 - Detectar rostos
 - Extrair embeddings faciais
 - Comparar similaridade entre imagens
 - Retornar nível de confiança (%) da identificação
 
-# Funcionalidades
+## Funcionalidades
 # Cadastro de Pessoas
 - Nome
 - Documento
@@ -58,12 +58,10 @@ O sistema utiliza a biblioteca `DeepFace` para:
 - Listagem de pessoas cadastradas
 - Exclusão de registros
 
-# Deploy
-O projeto já esteve hospedado anteriormente em:
-Railway (backend)
-Neon (banco de dados PostgreSQL)
+## Deploy
+O projeto já esteve hospedado anteriormente em: Railway (backend) e Neon (banco de dados PostgreSQL).
 Atualmente não está em produção.
 
-# Desenvolvido por
+## Desenvolvido por
 - Vinicius Souza
 - Rafael Soares
